@@ -1,0 +1,32 @@
+# Per-sprint gscript instances — these self-delete after success per Hard
+# Rule #10, but if a run fails mid-flight the script sits on disk. Gitignore
+# it so a follow-up commit doesn't accidentally stage the leftover.
+gscript.ps1
+gscript.sh
+
+# Operator-private notes — never commit
+.private/
+*.private.*
+.env
+.env.local
+
+# PAT in any form, in any file. Defense-in-depth — gscripts read from
+# localmd at run time so the value never lands in this tree, but worth
+# guarding anyway.
+*.pat
+**/PAT*.txt
+**/pat-*.txt
+
+# PowerShell + bash editor artifacts
+*.ps1.bak
+*.sh.bak
+*~
+
+# Logs from gscript runs (if a future version writes them)
+*.log
+logs/
+
+# macOS / Windows shell artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
