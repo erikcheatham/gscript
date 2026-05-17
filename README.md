@@ -10,21 +10,81 @@ It exists because the alternative is "git push, then alt-tab to GitHub, then wai
 
 1. **One-time setup** — see [docs/PAT-SETUP.md](docs/PAT-SETUP.md) for the GitHub PAT scoping (Contents R/W + Actions: Read + Workflows: R/W) and [docs/LOCALMD.md](docs/LOCALMD.md) for the localmd convention.
 
-2. **Per-sprint usage** — copy `gscript_template.ps1` (or `gscript_template.sh`) into your repo root as `gscript.ps1` (or `gscript.sh`), fill in the per-sprint sections (files-to-stage list + commit message + per-env config), then:
+2. **Pick a mode:**
+
+   **Module mode (PowerShell, recommended)** — `Import-Module` the module shipped in this repo + call `Invoke-Gscript` with a hashtable. Per-sprint scripts shrink from ~400 lines to ~15:
 
    ```powershell
-   # Windows
+   # In <your-repo>/gscript.ps1:
+   Import-Module C:\path\to\gscript\module\gscript.psd1
+
+   Invoke-Gscript @{
+       RepoOwner     = 'your-username'
+       RepoName      = 'your-repo'
+       FilesToStage  = @('src/file.cs', 'docs/notes.md')
+       CommitMessage = "feat: thing`n`nDetailed description."
+   }
+
+   Remove-Item $MyInvocation.MyCommand.Path -Force
+   ```
+
+   Three calling conventions all work, pick whichever reads cleanest:
+
+   ```powershell
+   # 1. Inline hashtable (above) — natural for per-sprint scripts
+   Invoke-Gscript @{ RepoOwner='owner'; RepoName='repo'; ... }
+
+   # 2. Named parameters — verbose but explicit
+   Invoke-Gscript -RepoOwner 'owner' -RepoName 'repo' `
+                  -FilesToStage @('src/file.cs') -CommitMessage 'feat'
+
+   # 3. PowerShell splatting — when sharing a config across calls
+   $params = @{ RepoOwner='owner'; ... }
+   Invoke-Gscript @params
+   ```
+
+   **Template mode (PowerShell or bash, alt single-file)** — copy `gscript_template.ps1` (or `gscript_template.sh`) into your repo root as `gscript.ps1` (or `gscript.sh`), fill in the per-sprint sections (files-to-stage list + commit message + per-env config), then:
+
+   ```powershell
+   # Windows PowerShell
    cd C:\path\to\your-repo
    .\gscript.ps1
    ```
 
    ```bash
-   # Linux / macOS
+   # Linux / macOS (bash template only — module is PowerShell-only at v1.1)
    cd /path/to/your-repo
    ./gscript.sh
    ```
 
 3. **Watch it work** — preflight checks run, files stage, commit lands, push fires, CI watch surfaces every job + step transition live in your shell, post-deploy probes verify the endpoint is responding, script self-deletes. One command, full sprint shipped end-to-end.
+
+## Module API (v1.1+)
+
+The module exports seven functions. `Invoke-Gscript` is the main entry; the rest are standalone helpers callable on their own.
+
+| Function | Purpose |
+|---|---|
+| `Invoke-Gscript` | Main entry. Runs the full ceremony from a hashtable or parameter set. |
+| `Clear-StaleGitLocks` | Auto-clean stale `.git/*.lock` files when no git processes are running. |
+| `Invoke-GitWithRetry` | Run any git command with 3-attempt exponential backoff against lock collisions. |
+| `Test-TrailingNulls` | Check one file for trailing `\x00` bytes (FUSE-mount gotcha defense). |
+| `Get-LocalmdPat` | Resolve a GitHub PAT from `~/private/local.md`. |
+| `Watch-GithubCi` | Poll GitHub Actions for a workflow run, print per-step transitions. |
+| `Test-PostDeployProbe` | Curl an endpoint list, verify each returns a status in the expected range. |
+
+Each function has full PowerShell help: `Get-Help Invoke-Gscript -Full`.
+
+Installation:
+
+```powershell
+# In-repo (clone gscript repo, point Import-Module at the manifest)
+git clone https://github.com/erikcheatham/gscript.git
+Import-Module C:\path\to\gscript\module\gscript.psd1
+
+# Future: PSGallery (banked for v1.1.1+)
+# Install-Module gscript -Scope CurrentUser
+```
 
 ## What it does (in order)
 
@@ -61,11 +121,15 @@ gscript/
 ├── README.md                       # this file
 ├── LICENSE                         # Apache 2.0
 ├── CHANGELOG.md                    # version history
-├── gscript_template.ps1            # canonical PowerShell template
-├── gscript_template.sh             # canonical bash port
+├── module/
+│   ├── gscript.psd1                # PowerShell module manifest (v1.1+)
+│   └── gscript.psm1                # PowerShell module body (seven exports)
+├── gscript_template.ps1            # canonical PowerShell template (alt single-file mode)
+├── gscript_template.sh             # canonical bash port (single-file only at v1.1)
 ├── examples/
-│   ├── minimal-push.ps1            # smallest viable example (PS)
-│   ├── full-ceremony.ps1           # full sprint ceremony (PS)
+│   ├── module-mode.ps1             # v1.1+ module-mode (~15-line per-sprint script)
+│   ├── minimal-push.ps1            # smallest viable example (PS template mode)
+│   ├── full-ceremony.ps1           # full sprint ceremony (PS template mode)
 │   ├── minimal-push.sh             # smallest viable example (bash)
 │   └── full-ceremony.sh            # full sprint ceremony (bash)
 └── docs/
@@ -77,8 +141,10 @@ gscript/
 
 ## Versions
 
-- **v1.0** (current) — Canonical template + bash port + docs + examples. Consumers clone the repo, copy the template into their own project, customize.
-- **v1.1** (planned) — PowerShell module shape: `Install-Module gscript` from PSGallery, `Invoke-Gscript -Config gscript.json`. Functions exported: `Test-TrailingNulls`, `Clear-StaleGitLocks`, `Watch-GithubCi`, `Test-PostDeployProbe`. Same defenses, less per-project boilerplate. Banked for v1.1 once v1's surface is exercised across multiple repos.
+- **v1.0** (shipped) — Canonical template + bash port + docs + examples. Single-file mode for either shell. Consumers copy the template into their own project, customize.
+- **v1.1** (current) — PowerShell **module** shape. `Import-Module` + `Invoke-Gscript @{...}` reduces per-sprint scripts from ~400 lines to ~15. Seven functions exported: `Invoke-Gscript`, `Clear-StaleGitLocks`, `Invoke-GitWithRetry`, `Test-TrailingNulls`, `Get-LocalmdPat`, `Watch-GithubCi`, `Test-PostDeployProbe`. Template mode still supported; bash stays at template-only.
+- **v1.1.1** (banked) — PSGallery publish: `Install-Module gscript` directly.
+- **v1.2** (banked) — Bash sourceable library at parity with the PowerShell module: `source gscript.bash; invoke_gscript` for non-PowerShell consumers.
 - **v2.0** (banked) — Cross-shell config file (`.gscript.yaml` at repo root) so per-sprint customization is data-not-code. PowerShell + bash both read the same config; ceremony stays language-portable.
 
 ## Lineage
