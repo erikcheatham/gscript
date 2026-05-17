@@ -95,19 +95,19 @@ Per-sprint scripts shrink from 400 lines to 5 lines + a config file.
 ```yaml
 # .gscript.yaml in the repo root
 repo:
-  owner: erikcheatham
-  name: AllThruit
+  owner: your-github-username
+  name: your-repo-name
 ci:
-  workflow: deploy-staging.yml
+  workflow: deploy.yml
   watch: true
   max_minutes: 15
 probes:
-  - url: https://staging.allthruit.com/
+  - url: https://staging.your-app.example.com/
     expected: 200..399
 defaults:
   commit_author:
-    name: darwincommits
-    email: darwinsemailinbox@gmail.com
+    name: ai-bot
+    email: ai-bot@example.com
 
 # .gscript-sprint.yaml — overridden per-sprint
 files:

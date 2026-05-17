@@ -27,11 +27,11 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 # ── CONFIGURE: persona identity for AI-authored commits ───────────────
 # Set to whatever git author you want for AI-authored commits. The
-# convention is a distinct AI-persona identity (e.g. "darwincommits" /
-# "ai-bot@yourdomain") so the operator can grep `git log --author=` and
-# see exactly which commits an AI session authored vs which the operator
-# typed by hand. NEVER use a real human's name + email here without
-# their consent.
+# convention is a distinct AI-persona identity (e.g. "ai-bot" /
+# "ai-bot@yourdomain.com" or a custom name like "my-agent") so the
+# operator can grep `git log --author=` and see exactly which commits
+# an AI session authored vs which the operator typed by hand. NEVER
+# use a real human's name + email here without their consent.
 $CommitName  = "ai-bot"
 $CommitEmail = "ai-bot@example.com"
 

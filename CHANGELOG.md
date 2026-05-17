@@ -4,7 +4,7 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 ## [1.0.0] — 2026-05-17
 
-Initial release. Extracted from infrastructure originally built for the AllThruit project + Recto substrate; generalized into a standalone wrapper anyone can adopt.
+Initial release. Extracted from infrastructure originally built for a multi-module .NET project + the Recto substrate; generalized into a standalone wrapper anyone can adopt.
 
 ### Added
 

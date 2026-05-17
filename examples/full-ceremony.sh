@@ -7,18 +7,18 @@
 
 set -euo pipefail
 
-COMMIT_NAME="darwincommits"
-COMMIT_EMAIL="darwinsemailinbox@gmail.com"
-REPO_OWNER="erikcheatham"
-REPO_NAME="AllThruit"
-CI_WORKFLOW_FILE="deploy-staging.yml"
+COMMIT_NAME="ai-bot"
+COMMIT_EMAIL="ai-bot@example.com"
+REPO_OWNER="your-github-username"
+REPO_NAME="your-repo-name"
+CI_WORKFLOW_FILE="deploy.yml"
 WATCH_CI=true
 CI_WATCH_MAX_MINUTES=15
 CI_WATCH_POLL_SECONDS=20
 
 PROBE_ENDPOINTS=(
-    "https://staging.allthruit.com/|200-399"
-    "https://staging.allthruit.com/api/v1/reviews|200-399"
+    "https://staging.your-app.example.com/|200-399"
+    "https://staging.your-app.example.com/api/v1/health|200-399"
 )
 
 LOCALMD_PATH="${HOME}/private/local.md"

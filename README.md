@@ -81,11 +81,11 @@ gscript/
 - **v1.1** (planned) — PowerShell module shape: `Install-Module gscript` from PSGallery, `Invoke-Gscript -Config gscript.json`. Functions exported: `Test-TrailingNulls`, `Clear-StaleGitLocks`, `Watch-GithubCi`, `Test-PostDeployProbe`. Same defenses, less per-project boilerplate. Banked for v1.1 once v1's surface is exercised across multiple repos.
 - **v2.0** (banked) — Cross-shell config file (`.gscript.yaml` at repo root) so per-sprint customization is data-not-code. PowerShell + bash both read the same config; ceremony stays language-portable.
 
-## Authorship + lineage
+## Lineage
 
-`gscript` was extracted from infrastructure originally built for [AllThruit](https://github.com/erikcheatham/AllThruit), a multi-module .NET review platform with a multi-machine deployment (HECATE dev workstation + DARWIN staging server + MAC build host). The same wrapper pattern works for any GitHub-hosted project where an AI session is authoring commits via a sandboxed file layer.
+`gscript` was extracted from infrastructure originally built across a multi-repo .NET stack with a multi-machine deployment (dev workstation + staging server + build host). The same wrapper pattern works for any GitHub-hosted project where an AI session is authoring commits via a sandboxed file layer.
 
-Sister project: [Recto](https://github.com/erikcheatham/Recto) — the operator-phone-as-root-of-trust capability substrate. `gscript`'s localmd PAT convention is sized to be small enough that future versions can migrate to a Recto-vault-backed PAT-resolver without changing the per-sprint contract.
+Sister project: [Recto](https://github.com/erikcheatham/Recto) — an operator-phone-as-root-of-trust capability substrate. `gscript`'s localmd PAT convention is sized to be small enough that future versions can migrate to a Recto-vault-backed PAT-resolver without changing the per-sprint contract.
 
 ## License
 

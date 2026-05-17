@@ -12,19 +12,19 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
-$CommitName  = "darwincommits"
-$CommitEmail = "darwinsemailinbox@gmail.com"
-$RepoOwner   = "erikcheatham"
-$RepoName    = "AllThruit"
-$CiWorkflowFile = "deploy-staging.yml"
+$CommitName  = "ai-bot"
+$CommitEmail = "ai-bot@example.com"
+$RepoOwner   = "your-github-username"
+$RepoName    = "your-repo-name"
+$CiWorkflowFile = "deploy.yml"
 
 $WatchCi = $true
 $CiWatchMaxMinutes = 15
 $CiWatchPollSeconds = 20
 
 $ProbeEndpoints = @(
-    @{ Url = "https://staging.allthruit.com/";              ExpectedRange = 200..399 }
-    @{ Url = "https://staging.allthruit.com/api/v1/reviews"; ExpectedRange = 200..399 }
+    @{ Url = "https://staging.your-app.example.com/";              ExpectedRange = 200..399 }
+    @{ Url = "https://staging.your-app.example.com/api/v1/health"; ExpectedRange = 200..399 }
 )
 
 # ── Stale-lock auto-recovery ──────────────────────────────────────────

@@ -13,7 +13,7 @@ Mint a fine-grained PAT at https://github.com/settings/personal-access-tokens wi
 | **Repository: Workflows** | Read and write | Lets you push commits that modify `.github/workflows/*.yml` files (without this, the push fails when ANY workflow file changes — even if the change is unrelated to CI) |
 | **Repository: Metadata** | Read-only | Required (GitHub auto-adds this; you can't deselect it) |
 
-That's the **minimum** set. The rest of the canonical AllThruit-grade scoping adds:
+That's the **minimum** set. The full-ceremony scoping (recommended for any project that grows into a multi-environment deploy + secrets rotation workflow) adds:
 
 | Permission | Access | Why |
 |---|---|---|
