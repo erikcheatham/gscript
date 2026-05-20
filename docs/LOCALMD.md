@@ -24,11 +24,11 @@ hits, credential index for AI-authored gitscripts.
 
 ## Machine identification
 
-Working from: HECATE (Windows dev workstation, path C:\Users\eriki\)
+Working from: workstation (Windows dev workstation, path C:\Users\username\)
 
 ## Secrets and API tokens
 
-### DARWIN_HUB_V3 — GitHub fine-grained PAT (90-day, expires 2026-07-30)
+### GITHUB_PAT — GitHub fine-grained PAT (90-day, expires YYYY-MM-DD)
 
 Scopes: Contents R/W, Actions: Read, Workflows R/W, Pull requests R/W,
 Deployments R/W, Environments R/W, Secrets R/W, Variables R/W,
