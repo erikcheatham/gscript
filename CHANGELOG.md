@@ -2,6 +2,66 @@
 
 All notable changes to `gscript` will be documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] — 2026-05-24
+
+Ships [`docs/IM-SM-MODEL.md`](docs/IM-SM-MODEL.md) — operator-side architectural framework documenting how the Intelligence Model (cross-cutting `CLAUDE.md`) composes with the Sidecar Model (per-file `docs/code-notes/<mirror>.md`) into a unified four-tier context model. AI sessions across the operator's project portfolio load only what the current question requires; cold-start cost stays bounded; per-surface depth is discoverable on-demand.
+
+### Added
+
+- **`docs/IM-SM-MODEL.md`** — the canonical four-tier model: machine gate (Tier 0) → IM `CLAUDE.md` (Tier 1, always-loaded) → topic docs (Tier 2, by intent) → sidecars (Tier 3, on-demand) → source (Tier 4, when editing). Session-start ritual + per-surface ritual + knowledge-placement decision matrix + discoverability primitives (notes.ps1, pointer comments, INDEX). Includes the canonical post-migration verification sequence.
+- **GOTCHAS entry 8** — Post-migration sidecar verification: bash mount lies, use Read/Grep tools. Sister-defense of entry 1's FUSE-mount trailing-null trap but in the opposite direction (bash sees EMPTY where Read tool sees CONTENT, vs entry 1 where bash sees CORRUPTION the Read tool doesn't).
+
+### History — earned from the empirical IM-vs-SM comparison test (2026-05-24)
+
+The framework crystallized during an A/B comparison: two AI conversations were asked the same question about an application's architecture, one with session-state-rich working memory (the migration session that authored 24 sidecars) and one fresh with zero working memory but the sidecars on disk.
+
+The fresh conversation produced a RICHER per-file architectural answer because it was forced to load the depth via Read tool. The session-state-rich conversation produced a richer cross-cutting synthesis because it had the migration arc + active sprint state in working memory. The two outputs were complementary, not redundant. The IM + SM tiers formalize what made each output strong: the IM carries cross-cutting synthesis well; the SM carries per-file depth well. Each tier loads on its own cadence; together they describe a context surface that scales to N projects without bottlenecking on cold-start cost.
+
+### Architectural notes
+
+The model presupposes **Hard Rule #32** (sidecar-prose-everywhere) in any project that adopts it. Source files carry `<summary>` one-liners + brief `//` markers only; multi-paragraph rationale, decision history, parser-fragility traps, foundational primitive examples, and cross-references migrate to the sidecar. CSS comments inside Razor `<style>` blocks that contain `<` / `>` / Unicode arrows / literal HTML element-name tags MIGRATE because the sidecar is markdown — Razor parser fragility (RZ9980 / RZ10007) retires by construction.
+
+First canonical reference implementation at scale: AllThruit's 24+ sidecars covering ~10,000 lines of source across the chat-tier civic-office model + Creator's Corner v1.1 + Theme System V2 + capability JWS verification + AI provider routing + personalization layer + In Theaters region-aware filter.
+
+### Defense behavior
+
+Same as v1.1 / v1.2 — the docs ship pure; the gscript engine itself unchanged. v1.3 is documentation-and-discipline, not new defenses. The new GOTCHAS entry 8 codifies the post-migration verification sequence as canonical operator-side knowledge.
+
+### Companion: AI session startup ritual extends naturally
+
+Existing CLAUDE.md "Conversation startup ritual" sections in operator projects already specify Tier 0 + Tier 1 reads. The framework formalizes the implicit decision NOT to pre-load Tier 3 sidecars at startup — they're the on-demand depth surface. Sessions stay fast; depth loads when a specific surface is touched. The discoverability primitives (pointer comments in source + `notes.ps1 get <substring>` + per-project `docs/code-notes/README.md` INDEX) make on-demand sidecar loading low-friction.
+
+## [1.2.0] — 2026-05-20
+
+Ships `authorship.ps1` — canonical authorship-cleanup tool for rewriting commit author identities across multiple repos via a git mailmap. Earned the hard way 2026-05-20 night during a cross-repo cleanup of an accidental `<NumericID>+<username>@users.noreply.github.com` noreply-binding bug where the wrong numeric GitHub user ID was embedded in a gitscript's author override, causing 5 of an operator's repos to attribute commits to a completely unrelated GitHub user.
+
+### Added
+
+- **`authorship.ps1`** — parameterized authorship-cleanup tool wrapping `git filter-repo --mailmap`. Pre-flight checks (git-filter-repo installed, mailmap exists + non-empty, every repo path is a valid git repo). Per-repo cleanup loop: capture pre-rewrite SHA to `<repo>/.git/authorship-pre-rewrite-sha.txt` as a rollback anchor, capture origin URL before filter-repo strips it, run filter-repo with `--force`, **immediately re-add origin BEFORE the SHA-check + push decision** (the load-bearing bug-fix from the previous round where the script bailed-without-restoring-origin on the SHA-unchanged path), verify HEAD actually changed before force-pushing, force-push to origin/main. Post-run summary table + author-diagnostic verification loop. Supports `-DryRun` (preview matches without modifying), `-SkipPush` (rewrite locally without pushing), `-GitHubOwner` (origin URL fallback prefix).
+- Persistent infrastructure (NOT self-deleting like per-sprint `gscript_*` scripts). Recurring tool for whenever authorship-cleanup is needed.
+
+### Architectural notes
+
+The mailmap file itself is the operator's per-cleanup artifact; `authorship.ps1` is the canonical execution engine. Mailmap format (`git-mailmap(5)`):
+
+```
+<Proper Name> <proper@email> <Commit Name> <commit@email>
+```
+
+Every commit whose author matches the right-hand side gets rewritten to the left-hand side. The script does NOT prescribe what canonical identity should be — that's mailmap-driven and operator-controlled. The pattern works for any cleanup shape: collapse multiple AI-tool identities to a single human author, normalize email-domain migrations, fix noreply-ID-binding bugs like the one this version was earned from, etc.
+
+### Defense behavior
+
+Same six gotcha defenses as v1.1's module + template ship (stale-lock auto-recovery, retry-on-collision, FUSE trailing-null preflight, fetch+divergence check, post-push CI watch with per-step granularity, post-deploy probe) — but `authorship.ps1` doesn't run them as a normal commit flow. Its specific defenses are: pre-flight git-filter-repo install check, mailmap non-emptiness verification, repo-path validation before iterating, rollback-anchor file write per repo, **origin re-add ordering fix** (the canonical bug from the previous round), HEAD-change verification before push.
+
+### Companion: GitHub UI cache caveat
+
+Earned alongside the script: rewriting commits + force-pushing fixes the per-repo contributor graph at `/graphs/contributors`, but does NOT clear:
+- The repo's main-page sidebar "Contributors N" widget (separate cache that retains "ever-contributed" identities)
+- The profile-page "Built by" avatars on `github.com/<user>` (separate cache, refreshes least frequently)
+
+Recreate the repo on GitHub (delete + create fresh with same name + privacy + `git push -u origin main` from local) to nuke all caches simultaneously. For repos with self-hosted GitHub Actions runners, plan for runner re-registration ceremony as part of the recreate.
+
 ## [1.1.0] — 2026-05-17
 
 PowerShell module shape ships. Per-sprint scripts shrink from ~400 lines (template mode) to ~15 lines (module mode).

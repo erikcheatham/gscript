@@ -157,6 +157,40 @@ The diff-only approach means no full-state redraws — each line is one transiti
 
 If the probe fails, the gscript exits with a clear "PROBE FAIL" + the failing URL + a hint that staging may still be warming up. Operator can retry manually in 30s if it's a warmup-window issue; otherwise the failure is real and worth investigating.
 
+## 8. Post-migration sidecar verification: bash mount lies, use Read/Grep tools
+
+**Symptom**: After a large sidecar-prose migration sweep (N source files edited to replace multi-paragraph inline comments with one-line pointer comments to `docs/code-notes/<mirror>.md`), the operator runs `bash grep 'docs/code-notes/' <source-file>` to verify the pointer landed. Bash returns NO matches across every migrated source file. Same `grep` invocation against the freshly-authored sidecar files returns no matches. `wc -l` returns ~0 lines. Everything looks like the migration failed silently.
+
+Operator panics, considers rolling back. Cross-checks via the AI's `Read` tool: the source file has 21 pointer comments. The sidecar is 455 lines. Both files are intact on the Windows filesystem.
+
+**Root cause**: The sandbox FUSE mount serves STALE views of files freshly edited via the AI's `Edit` / `Write` tools. The bash mount path (`/sessions/<session>/mnt/...`) reads through a FUSE layer that hasn't refreshed its metadata cache after the AI's IPC-path writes. `grep` against stale bytes returns nothing. `wc -l` reads stale length. This is the OPPOSITE direction of the trailing-null trap (entry 1) — where bash sees CORRUPTED bytes the AI Read tool doesn't, here bash sees EMPTY bytes the AI Read tool DOES see correctly.
+
+**What didn't work**:
+- `tail -f` against the freshly-edited file (FUSE never refreshes; stays empty in bash's view)
+- Forcing a re-mount via `mount -o remount` (sandbox layer doesn't support it)
+- `sync` (operates on the FUSE layer, doesn't refresh its cache)
+- Trusting bash output (the source of the false-alarm)
+
+**What works**: post-migration verification MUST use the AI's `Read` / `Grep` tools (which use the IPC path that sees Windows-truth), NOT bash grep / wc / find. Sister-defense of entry 1's "trust Read tool over bash" pattern.
+
+**Canonical post-migration verification sequence** (run via AI's tools, not bash):
+
+```
+1. Grep tool with `output_mode: count` against each migrated source:
+   pointer count should be > 0.
+2. Glob tool against `docs/code-notes/**/*.md`:
+   every expected sidecar present on disk.
+3. Read tool with `offset: <last_lines - 3>`:
+   source file ends cleanly with `}` or `</tag>`.
+4. Grep tool for Razor parser fragility post-migration:
+   pattern `/\*[^*]*[→⇒←↑↓][^*]*\*/` against any .razor file
+   should return NO matches (CSS comments must be Unicode-arrow-free).
+```
+
+The `gscript_template.ps1`'s existing `Test-TrailingNulls` + `Test-FileSizeSanity` + `Test-StructuredFile` gates catch in-tree corruption before push; this entry covers the SEPARATE concern of verifying that a successful migration ACTUALLY landed on disk before declaring the sweep complete.
+
+**Caught 2026-05-24** during a 16-file sidecar-migration sweep across `AllThruit.Shared`. Bash returned `MISSING POINTERS` for all 16 source files; Windows-truth Grep tool confirmed all 16 source files had pointer comments (168 total references). Without the Grep-tool cross-check the operator would have rolled back a successful migration. The IM+SM model documented in [IM-SM-MODEL.md](IM-SM-MODEL.md) formalizes the verification sequence as canonical.
+
 ## What's NOT yet defended (and why)
 
 These are known issues that gscript v1 doesn't address. Each has a reason for being deferred.
