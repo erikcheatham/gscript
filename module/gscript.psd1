@@ -1,6 +1,6 @@
 @{
     RootModule        = 'gscript.psm1'
-    ModuleVersion     = '1.1.0'
+    ModuleVersion     = '1.4.0'
     GUID              = 'c240d8ba-d2a3-426b-9558-da78611f2f54'
     Author            = 'Erik Cheatham'
     Copyright         = '(c) 2026 Erik Cheatham. Apache 2.0.'
@@ -27,6 +27,41 @@
             LicenseUri   = 'https://github.com/erikcheatham/gscript/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/erikcheatham/gscript'
             ReleaseNotes = @'
+v1.4.0 — `-NoDeploy` switch for documentation pushes.
+
+NEW: `Invoke-Gscript -NoDeploy` (or `@{ NoDeploy = $true }` in hashtable
+form). Three coordinated mutations:
+  1. Auto-appends `[skip ci]` to the commit subject line (idempotent —
+     skipped if subject already carries any canonical skip directive:
+     `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]`,
+     `[actions skip]`). GitHub Actions skips ALL workflow runs for the
+     push regardless of paths-ignore filters.
+  2. Forces `-WatchCi = $false` (no point polling for a run that will
+     never appear).
+  3. Forces `-ProbeEndpoints = @()` (no point probing when no deploy
+     happened).
+Overrides any explicit values the caller passed for WatchCi or
+ProbeEndpoints, so callers don't have to coordinate three params.
+Banner prints `[NODEPLOY mode]` lines for operator clarity.
+
+Use cases: IM banking / CLAUDE.md edits / architecture write-ups /
+calendar restructuring / any commit that produces no user-facing
+behavior change. Saves the full CI cycle wall-clock vs `WatchCi=$false`
+alone (which still pays the 60s skip-detect poll).
+
+    # Minimal NoDeploy push:
+    Invoke-Gscript @{
+        RepoOwner = 'owner'
+        RepoName = 'repo'
+        FilesToStage = @('CHANGELOG.md')
+        CommitMessage = 'docs: bank architectural commitment'
+        NoDeploy = $true
+    }
+
+Backward-compatible: default `$NoDeploy = $false` preserves existing
+behavior. v1.1.0 callers don't need any changes.
+
+------------------------------------------------------------------------
 v1.1.0 — module shape.
 
 Functions exported:
@@ -51,8 +86,9 @@ Per-sprint scripts shrink from ~400 lines to ~15:
 Template-shape (gscript_template.ps1) stays in repo as the alt single-file
 mode. Module ships as the recommended path going forward.
 
-v1.2 banked: bash library (sourceable gscript.bash for non-PowerShell consumers).
-v2.0 banked: .gscript.yaml cross-shell config.
+Future:
+- Bash library (sourceable gscript.bash for non-PowerShell consumers).
+- .gscript.yaml cross-shell config.
 '@
         }
     }

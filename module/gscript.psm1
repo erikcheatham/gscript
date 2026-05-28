@@ -585,6 +585,21 @@ Each Validate is a ScriptBlock that throws on invalid content. Default empty.
 .PARAMETER WorkingDirectory
 Repo root. Default: auto-detected from caller's $PSScriptRoot.
 
+.PARAMETER NoDeploy
+Switch. When set, three things coordinate:
+  (1) `[skip ci]` is auto-appended to the commit subject (first line) so
+      GitHub Actions skips ALL workflow runs for the push regardless of
+      paths-ignore filters. Idempotent — skipped if the subject already
+      carries any canonical skip directive ([skip ci] / [ci skip] /
+      [no ci] / [skip actions] / [actions skip]).
+  (2) -WatchCi is forced to $false (no point polling for a run that
+      will never appear).
+  (3) -ProbeEndpoints is forced to @() (no point probing when no deploy
+      happened).
+Use for documentation pushes / config tweaks where firing CI would be
+wasted wall-clock. Overrides any explicit -WatchCi or -ProbeEndpoints
+values the caller passed.
+
 .EXAMPLE
 Invoke-Gscript @{
     RepoOwner = 'erikcheatham'
@@ -592,6 +607,16 @@ Invoke-Gscript @{
     FilesToStage = @('README.md')
     CommitMessage = 'docs: fix typo'
     WatchCi = $false
+}
+
+.EXAMPLE
+# NoDeploy mode — docs/IM banking, no CI cycle, fast exit.
+Invoke-Gscript @{
+    RepoOwner = 'erikcheatham'
+    RepoName = 'my-app'
+    FilesToStage = @('CHANGELOG.md')
+    CommitMessage = 'docs: bank architectural commitment'
+    NoDeploy = $true
 }
 
 .EXAMPLE
@@ -628,7 +653,20 @@ function Invoke-Gscript {
 
         [string]$LocalmdPath,
         [hashtable]$PerSprintValidators = @{},
-        [string]$WorkingDirectory
+        [string]$WorkingDirectory,
+
+        # When set: auto-appends `[skip ci]` to the commit subject line
+        # (idempotent — skipped if subject already carries any of the
+        # canonical skip directives), forces $WatchCi = $false, and
+        # forces $ProbeEndpoints = @(). Use for documentation pushes /
+        # IM banking / config tweaks where firing CI would be wasted
+        # wall-clock. GitHub Actions' `[skip ci]` directive causes
+        # GitHub to skip ALL workflow runs for the push regardless of
+        # paths-ignore filters. Sister tokens that work identically:
+        # `[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]`.
+        # The switch overrides any explicit -WatchCi / -ProbeEndpoints
+        # values so callers don't have to coordinate three params.
+        [switch]$NoDeploy
     )
 
     $ErrorActionPreference = "Stop"
@@ -658,6 +696,43 @@ function Invoke-Gscript {
         throw "Invoke-Gscript: FilesToStage must contain at least one path."
     }
     if (-not $CommitMessage) { throw "Invoke-Gscript: CommitMessage is required." }
+
+    # ── NoDeploy mode: three coordinated mutations ───────────────────────
+    # When -NoDeploy is set, the goal is "commit lands on origin/main but
+    # no CI fires and we don't waste wall-clock waiting for it." Three
+    # things have to coordinate, which the switch handles together so
+    # callers can't half-configure it:
+    #   1. Auto-append `[skip ci]` to the FIRST LINE of $CommitMessage
+    #      (the commit subject). GitHub Actions' canonical skip-trigger
+    #      directive — causes GitHub to skip ALL workflow runs for the
+    #      push regardless of paths-ignore filters. Idempotent: if the
+    #      subject already contains any of `[skip ci]`, `[ci skip]`,
+    #      `[no ci]`, `[skip actions]`, `[actions skip]`, no re-append.
+    #   2. Force $WatchCi = $false. Without this, the CI watch loop
+    #      polls the workflow-runs endpoint for 60s waiting for a run
+    #      that will never appear, then declares CI skipped — wasted
+    #      wall-clock that the dedicated NoDeploy path doesn't pay.
+    #   3. Force $ProbeEndpoints = @(). Post-deploy probes are pointless
+    #      when no deploy happened.
+    # Banner printed below so the operator's terminal makes the mode
+    # obvious (matches the `gscript_nodeploy.ps1` trigger wrapper's
+    # message style for visual continuity).
+    if ($NoDeploy) {
+        $msgLines = $CommitMessage -split "`n", 2
+        $subjectLine = $msgLines[0].TrimEnd()
+        if ($subjectLine -notmatch '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]') {
+            $subjectLine = $subjectLine + ' [skip ci]'
+            if ($msgLines.Length -gt 1) {
+                $CommitMessage = $subjectLine + "`n" + $msgLines[1]
+            } else {
+                $CommitMessage = $subjectLine
+            }
+        }
+        $WatchCi = $false
+        $ProbeEndpoints = @()
+        Write-Host "[NODEPLOY mode] commit will carry [skip ci]; no CI deploy will fire." -ForegroundColor DarkCyan
+        Write-Host "[NODEPLOY mode] Skipping CI watch + post-deploy probes." -ForegroundColor DarkCyan
+    }
 
     # Resolve working directory from caller if not explicit
     if (-not $WorkingDirectory) {

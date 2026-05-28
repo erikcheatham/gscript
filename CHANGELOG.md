@@ -2,6 +2,30 @@
 
 All notable changes to `gscript` will be documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] — 2026-05-28
+
+Ships `-NoDeploy` switch on `Invoke-Gscript`. Three coordinated mutations behind one parameter: auto-append `[skip ci]` to the commit subject (idempotent), force `WatchCi = $false`, force `ProbeEndpoints = @()`. Use for documentation pushes / IM banking / config tweaks where firing CI would be wasted wall-clock. Total wall-clock for a NoDeploy push drops to typically 5-10 seconds vs the ~6 min the regular ceremony would consume.
+
+### Added
+
+- **`Invoke-Gscript -NoDeploy`** — single switch coordinating the three mutations needed for "commit lands on origin/main but no CI fires and we don't waste wall-clock waiting for it." GitHub Actions' canonical `[skip ci]` directive skips ALL workflow runs for the push regardless of paths-ignore filters. Idempotent — re-append is skipped if subject already carries any canonical skip token (`[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]`). Overrides any explicit `-WatchCi` / `-ProbeEndpoints` values the caller passed so callers can't half-configure it. Banner prints `[NODEPLOY mode]` lines for operator clarity.
+- **`examples/nodeploy-mode.ps1`** — minimal example showing the NoDeploy flag in hashtable form (`@{ NoDeploy = $true }`).
+- **CHANGELOG + module psd1 ReleaseNotes** — full v1.4.0 entry with use cases + idempotency contract + back-compat note.
+
+### Why this matters
+
+`-WatchCi = $false` alone gets you part of the way — the script doesn't poll the workflow-runs endpoint waiting for a result. But without `[skip ci]` in the commit message, GitHub Actions STILL fires the workflow against the new commit; the deploy still happens in the background; CI minutes still get consumed. For docs-only pushes that's pure waste.
+
+The `-NoDeploy` switch coordinates the three settings (`[skip ci]` + `WatchCi=false` + `ProbeEndpoints=@()`) under a single semantic flag so callers don't have to remember all three. The banner makes the mode obvious in the operator's terminal.
+
+### Backward compatibility
+
+Default `$NoDeploy = $false` preserves existing behavior. v1.1.0 / v1.2.0 / v1.3.0 callers don't need any changes. The switch is purely additive.
+
+### Sister change in consumer projects
+
+The canonical consumer-side pattern lands as a sister `gscript_nodeploy.ps1` trigger wrapper at the consumer's repo root, which finds the latest `gscript_nodeploy_*.ps1` per-sprint script in `scripts/gscripts/` (sister of the existing `gscript.ps1` trigger wrapper). The two wrappers' globs are disjoint so they don't fight. v1.4.0+ per-sprint scripts in either flavor can just call `Invoke-Gscript @{ ...; NoDeploy = $true }` instead of inlining the template body.
+
 ## [1.3.0] — 2026-05-24
 
 Ships [`docs/IM-SM-MODEL.md`](docs/IM-SM-MODEL.md) — operator-side architectural framework documenting how the Intelligence Model (cross-cutting `CLAUDE.md`) composes with the Sidecar Model (per-file `docs/code-notes/<mirror>.md`) into a unified four-tier context model. AI sessions across the operator's project portfolio load only what the current question requires; cold-start cost stays bounded; per-surface depth is discoverable on-demand.

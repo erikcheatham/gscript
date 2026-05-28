@@ -142,10 +142,13 @@ gscript/
 ## Versions
 
 - **v1.0** (shipped) — Canonical template + bash port + docs + examples. Single-file mode for either shell. Consumers copy the template into their own project, customize.
-- **v1.1** (current) — PowerShell **module** shape. `Import-Module` + `Invoke-Gscript @{...}` reduces per-sprint scripts from ~400 lines to ~15. Seven functions exported: `Invoke-Gscript`, `Clear-StaleGitLocks`, `Invoke-GitWithRetry`, `Test-TrailingNulls`, `Get-LocalmdPat`, `Watch-GithubCi`, `Test-PostDeployProbe`. Template mode still supported; bash stays at template-only.
-- **v1.1.1** (banked) — PSGallery publish: `Install-Module gscript` directly.
-- **v1.2** (banked) — Bash sourceable library at parity with the PowerShell module: `source gscript.bash; invoke_gscript` for non-PowerShell consumers.
-- **v2.0** (banked) — Cross-shell config file (`.gscript.yaml` at repo root) so per-sprint customization is data-not-code. PowerShell + bash both read the same config; ceremony stays language-portable.
+- **v1.1** (shipped) — PowerShell **module** shape. `Import-Module` + `Invoke-Gscript @{...}` reduces per-sprint scripts from ~400 lines to ~15. Seven functions exported: `Invoke-Gscript`, `Clear-StaleGitLocks`, `Invoke-GitWithRetry`, `Test-TrailingNulls`, `Get-LocalmdPat`, `Watch-GithubCi`, `Test-PostDeployProbe`. Template mode still supported; bash stays at template-only.
+- **v1.2** (shipped) — `authorship.ps1` rewriter for cross-repo mailmap-driven author identity cleanup (built on the same gscript defenses).
+- **v1.3** (shipped) — IM+SM unified context model docs (`docs/IM-SM-MODEL.md`).
+- **v1.4** (current) — `Invoke-Gscript -NoDeploy` switch: auto-appends `[skip ci]` to commit subject, forces `WatchCi=$false`, forces `ProbeEndpoints=@()`. One semantic flag coordinating the three settings needed for "commit lands on origin/main but no CI fires." Use for documentation pushes / IM banking / config tweaks where firing CI would be wasted wall-clock. See `examples/nodeploy-mode.ps1`.
+- **v1.5** (banked) — PSGallery publish: `Install-Module gscript` directly.
+- **v2.0** (banked) — Bash sourceable library at parity with the PowerShell module: `source gscript.bash; invoke_gscript` for non-PowerShell consumers.
+- **v3.0** (banked) — Cross-shell config file (`.gscript.yaml` at repo root) so per-sprint customization is data-not-code. PowerShell + bash both read the same config; ceremony stays language-portable.
 
 ## Lineage
 
