@@ -19,7 +19,7 @@ public static class GithubCiWatch
 {
     public static CiWatchResult Watch(
         string repoOwner, string repoName, string workflowFile, string commitSha, string pat,
-        int maxMinutes = 15, int pollSeconds = 20)
+        int maxMinutes = 15, int pollSeconds = 20, int skipDetectSeconds = 90)
     {
         string apiBase = $"https://api.github.com/repos/{repoOwner}/{repoName}";
         string actionsUrl = $"https://github.com/{repoOwner}/{repoName}/actions";
@@ -31,6 +31,8 @@ public static class GithubCiWatch
         client.DefaultRequestHeaders.Add("User-Agent", "gscript"); // GitHub API rejects requests with no User-Agent
 
         var deadline = DateTime.UtcNow.AddMinutes(maxMinutes);
+        var watchStart = DateTime.UtcNow;
+        bool runSeen = false;   // becomes true once a workflow run for this SHA exists
         long? runId = null;
         string? lastStatus = null, lastConclusion = null;
         var printedJobs = new HashSet<string>();
@@ -48,6 +50,7 @@ public static class GithubCiWatch
                     int totalCount = root.TryGetProperty("total_count", out var tc) ? tc.GetInt32() : 0;
                     if (totalCount > 0 && root.TryGetProperty("workflow_runs", out var runs) && runs.GetArrayLength() > 0)
                     {
+                        runSeen = true;
                         var run = runs[0];
                         if (run.TryGetProperty("id", out var idEl)) runId = idEl.GetInt64();
                         status = Str(run, "status");
@@ -66,6 +69,17 @@ public static class GithubCiWatch
                             lastConclusion = conclusion;
                         }
                     }
+                }
+
+                // Skip-detect: if NO run for this workflow has appeared within skipDetectSeconds of
+                // the push, it was almost certainly skipped (paths-ignore / no trigger) — GitHub
+                // creates the run within seconds when it runs at all. Conclude 'skipped' and exit
+                // success rather than polling to the maxMinutes deadline. The push already landed on
+                // origin; there is simply nothing to watch.
+                if (!runSeen && (DateTime.UtcNow - watchStart).TotalSeconds >= skipDetectSeconds)
+                {
+                    Log.Yellow($"  No CI run for {workflowFile} within {skipDetectSeconds}s — workflow skipped (paths-ignore / no trigger). Push is on origin; nothing to watch.");
+                    return new CiWatchResult(true, null, actionsUrl, "skipped");
                 }
 
                 // per-step polling (may 404 on a fresh run / 403 without Actions:Read — swallowed)
