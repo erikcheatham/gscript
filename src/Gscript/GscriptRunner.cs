@@ -215,7 +215,8 @@ public static partial class GscriptRunner
 
             if (anySize)
             {
-                int maxPct = cfg.ShrinkageOverrides.TryGetValue(f, out var ov) ? ov : g.FileSizeSanity.MaxShrinkPct;
+                int maxPct = cfg.MaxShrinkPctOverride
+                             ?? (cfg.ShrinkageOverrides.TryGetValue(f, out var ov) ? ov : g.FileSizeSanity.MaxShrinkPct);
                 var r = FileSizeSanityGate.Check(rel, full, workingDir, maxPct);
                 if (!r.Ok) { Log.Red($"  FAIL {f} ({r.Reason})"); throw new GscriptException($"File-size gate failed on {f}: {r.Reason}"); }
             }
@@ -226,7 +227,8 @@ public static partial class GscriptRunner
             }
             if (anyMd)
             {
-                int maxPct = cfg.ShrinkageOverrides.TryGetValue(f, out var ov) ? ov : g.MarkdownLineCount.MaxShrinkPct;
+                int maxPct = cfg.MaxShrinkPctOverride
+                             ?? (cfg.ShrinkageOverrides.TryGetValue(f, out var ov) ? ov : g.MarkdownLineCount.MaxShrinkPct);
                 var r = MarkdownLineCountGate.Check(rel, full, workingDir, maxPct, g.MarkdownLineCount.MinHeadLines);
                 if (!r.Ok) { Log.Red($"  FAIL {f} ({r.Reason})"); throw new GscriptException($"Markdown-line gate failed on {f}: {r.Reason}"); }
             }

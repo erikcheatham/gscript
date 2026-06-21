@@ -37,7 +37,8 @@ public sealed class GscriptConfig
     public string? CommitMessage { get; set; }
     public bool NoDeploy { get; set; }
     public bool DryRun { get; set; }   // run gates + fetch/divergence, then stop before staging/commit/push
-    public Dictionary<string, int> ShrinkageOverrides { get; set; } = new(); // relpath (backslash form) -> maxPct
+    public Dictionary<string, int> ShrinkageOverrides { get; set; } = new(); // relpath -> maxPct (per-file shrink exemption; CLI --allow-shrink sets 100)
+    public int? MaxShrinkPctOverride { get; set; }   // CLI --max-shrink-pct: global shrink-gate relax for this push (wins over per-file + default)
 
     public static GscriptConfig Load(string path)
     {

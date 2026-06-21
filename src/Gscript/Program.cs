@@ -13,7 +13,7 @@ return Cli.Run(args);
 /// </summary>
 internal static class Cli
 {
-    private const string Version = "gscript 2.0.0-alpha.1";
+    private const string Version = "gscript 2.0.0-alpha.3";
 
     public static int Run(string[] args)
     {
@@ -27,6 +27,7 @@ internal static class Cli
             {
                 case "push":
                 {
+                    if (args[1..].Any(a => a is "-h" or "--help")) { PrintUsage(); return 0; }
                     var cfg = BuildConfig(args[1..]);
                     return GscriptRunner.Run(cfg).Success ? 0 : 1;
                 }
@@ -48,6 +49,8 @@ internal static class Cli
         string? configPath = null, files = null, message = null, repoOwner = null,
                 repoName = null, workflow = null, workingDir = null, localmd = null;
         bool noDeploy = false, noWatch = false, dryRun = false;
+        int? maxShrinkPct = null;
+        var allowShrink = new List<string>();
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -64,6 +67,8 @@ internal static class Cli
                 case "--no-deploy": noDeploy = true; break;
                 case "--no-watch": noWatch = true; break;
                 case "--dry-run": dryRun = true; break;
+                case "--max-shrink-pct": maxShrinkPct = int.Parse(Next(args, ref i)); break;
+                case "--allow-shrink": allowShrink.Add(Next(args, ref i)); break;
                 default: throw new GscriptException($"unknown option '{args[i]}'");
             }
         }
@@ -88,6 +93,8 @@ internal static class Cli
         if (noDeploy) cfg.NoDeploy = true;
         if (noWatch) cfg.WatchCi = false;
         if (dryRun) cfg.DryRun = true;
+        if (maxShrinkPct is int mp) cfg.MaxShrinkPctOverride = mp;
+        foreach (var p in allowShrink) cfg.ShrinkageOverrides[p] = 100;
 
         return cfg;
     }
@@ -112,6 +119,8 @@ internal static class Cli
         Console.WriteLine("  --no-deploy          append [skip ci]; skip CI watch + probes");
         Console.WriteLine("  --no-watch           push but don't watch CI");
         Console.WriteLine("  --dry-run            run gates + divergence check, then stop (no commit/push)");
+        Console.WriteLine("  --max-shrink-pct N   relax file-size + markdown shrink gates to N% for this push");
+        Console.WriteLine("  --allow-shrink <p>   exempt one path from the shrink gates (repeatable)");
         Console.WriteLine("  --config <path>      gscript.json (default: ./gscript.json if present)");
         Console.WriteLine("  --repo-owner <o>     override repo owner");
         Console.WriteLine("  --repo-name <r>      override repo name");
