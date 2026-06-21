@@ -1,0 +1,39 @@
+{
+  "repoOwner": "erikcheatham",
+  "repoName": "gscript",
+  "repoVisibility": "public",
+  "watchCi": false,
+  "commitName": "erikcheatham",
+  "commitEmail": "751184+erikcheatham@users.noreply.github.com",
+
+  "gates": {
+    "trailingNull": true,
+    "fileSizeSanity": { "enabled": true, "maxShrinkPct": 10 },
+    "structuredFile": true,
+    "markdownLineCount": { "enabled": true, "maxShrinkPct": 50, "minHeadLines": 100 },
+    "leakCheck": { "enabled": "auto" }
+  },
+
+  "filesToStage": [
+    "src/Gscript/Gscript.csproj",
+    "src/Gscript/Program.cs",
+    "src/Gscript/GscriptConfig.cs",
+    "src/Gscript/GscriptRunner.cs",
+    "src/Gscript/Log.cs",
+    "src/Gscript/Git/GitCommand.cs",
+    "src/Gscript/Git/GitRunner.cs",
+    "src/Gscript/Local/Localmd.cs",
+    "src/Gscript/Gates/GateResult.cs",
+    "src/Gscript/Gates/TrailingNullGate.cs",
+    "src/Gscript/Gates/FileSizeSanityGate.cs",
+    "src/Gscript/Gates/MarkdownLineCountGate.cs",
+    "src/Gscript/Gates/StructuredFileGate.cs",
+    "src/Gscript/Gates/LeakCheckGate.cs",
+    "src/Gscript/Ci/GithubCiWatch.cs",
+    "src/Gscript/Deploy/PostDeployProbe.cs",
+    "gscript.json",
+    ".gitignore"
+  ],
+
+  "commitMessage": "feat(tool): C# dotnet-tool successor to the PowerShell module\n\nPorts the gscript substrate from PowerShell to a cross-platform C# dotnet\ntool (dotnet tool install -g gscript), unifying the parallel ps1+sh\nimplementations into one canonical, dependency-free CLI so consumers stop\nforking the template.\n\n- Preflight gates: trailing-null, file-size-sanity, structured-file parse\n  (JSON/XML/YAML + Razor CSS-comment scan; .ps1 via optional pwsh shell-out),\n  markdown-line-count, and the localmd-sourced leak-check.\n- Git layer: stale-lock auto-recovery, retry-with-backoff on lock collisions,\n  PAT-in-URL auth (redacted from logs), divergence guard.\n- CI watch with per-step transitions; post-deploy probe (redirect-off).\n- localmd PAT + leak-pattern resolution.\n\nFirst dogfood: this commit is pushed by the tool itself."
+}

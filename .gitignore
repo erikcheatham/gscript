@@ -30,3 +30,11 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# .NET build artifacts (the C# gscript tool under src/). obj/ carries absolute
+# machine paths, so these must NEVER be committed.
+[Bb]in/
+[Oo]bj/
+**/[Bb]in/
+**/[Oo]bj/
+*.user

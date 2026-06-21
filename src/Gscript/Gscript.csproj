@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Gscript</RootNamespace>
+    <AssemblyName>gscript</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- dotnet tool packaging: `dotnet tool install -g gscript` (a dotnet tool IS a NuGet package) -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>gscript</ToolCommandName>
+    <PackageId>gscript</PackageId>
+    <Version>2.0.0-alpha.1</Version>
+    <Authors>erikcheatham</Authors>
+    <Description>Self-healing, cross-platform git-push + dev-ops ceremony tool. Content-shape preflight gates (trailing-null, file-size, structured-file parse, markdown shrinkage, leak-check), localmd PAT auth, stale-lock recovery, retry-on-collision, per-step CI watch, post-deploy probes. The C# successor to the gscript PowerShell module.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/erikcheatham/gscript</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/erikcheatham/gscript.git</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- Zero external dependencies by design: System.Text.Json, System.Xml.Linq,
+       System.Text.RegularExpressions are all in the BCL. The tool stays dep-light
+       and cross-platform (Windows/macOS/Linux) on the .NET runtime alone. -->
+
+</Project>
