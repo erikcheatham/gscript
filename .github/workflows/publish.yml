@@ -1,0 +1,57 @@
+name: publish
+
+# Publishes the gscript dotnet tool to NuGet when a v* tag is pushed, using
+# NuGet Trusted Publishing (OIDC) — no long-lived API key stored anywhere.
+#
+# One-time setup:
+#   1. nuget.org -> your username -> Trusted Publishing -> Create a policy:
+#        Repository Owner: erikcheatham
+#        Repository:       gscript
+#        Workflow File:    publish.yml      (file name only, no path)
+#        Environment:      (leave blank)
+#   2. This repo -> Settings -> Secrets and variables -> Actions -> Variables
+#        New repository variable  NUGET_USER = <your nuget.org profile name>
+#      (the profile name, NOT the email; kept out of source via a repo variable)
+#   3. git tag v2.0.0-alpha.1 && git push --tags     (or run from the Actions tab)
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # enable GitHub OIDC token issuance (Trusted Publishing)
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack
+        run: dotnet pack src/Gscript/Gscript.csproj -c Release -o ./artifacts
+
+      # Request a short-lived (~1h) NuGet API key via OIDC, right before push.
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push to NuGet
+        run: >
+          dotnet nuget push "./artifacts/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      # --- code-signing follow-up (commented until a cert exists) ----------
+      # To keep Windows Smart App Control enabled on the installing machine,
+      # the managed DLL must be Authenticode-signed by a SAC-trusted publisher.
+      # gscript is Apache-2.0 OSS, so it qualifies for a free SignPath.io OSS
+      # certificate. Once set up, add the SignPath signing step BEFORE 'Pack'
+      # so the published package carries a signed DLL.
