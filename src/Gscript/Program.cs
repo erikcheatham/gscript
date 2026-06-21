@@ -1,6 +1,7 @@
 using Gscript;
 using Gscript.Git;
 using Gscript.Local;
+using Gscript.Tasks;
 
 return Cli.Run(args);
 
@@ -20,17 +21,21 @@ internal static class Cli
         if (args[0] is "-h" or "--help" or "help") { PrintUsage(); return 0; }
         if (args[0] is "-v" or "--version") { Console.WriteLine(Version); return 0; }
 
-        if (args[0] != "push")
-        {
-            Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push' or 'gscript --help'.");
-            return 1;
-        }
-
         try
         {
-            var cfg = BuildConfig(args[1..]);
-            var result = GscriptRunner.Run(cfg);
-            return result.Success ? 0 : 1;
+            switch (args[0])
+            {
+                case "push":
+                {
+                    var cfg = BuildConfig(args[1..]);
+                    return GscriptRunner.Run(cfg).Success ? 0 : 1;
+                }
+                case "task":
+                    return TaskCommands.Run(args[1..]);
+                default:
+                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript task', or 'gscript --help'.");
+                    return 1;
+            }
         }
         catch (GscriptException ex) { Log.Red($"gscript: {ex.Message}"); return 1; }
         catch (LocalmdException ex) { Log.Red($"gscript: {ex.Message}"); return 1; }
@@ -99,6 +104,7 @@ internal static class Cli
         Console.WriteLine();
         Console.WriteLine("USAGE:");
         Console.WriteLine("  gscript push [options]");
+        Console.WriteLine("  gscript task <post|list|show|approve|reject|run>   (the comms task-bus)");
         Console.WriteLine();
         Console.WriteLine("OPTIONS:");
         Console.WriteLine("  --files <a,b,c>      comma-separated paths to stage (explicit; never `git add .`)");
