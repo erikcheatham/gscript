@@ -32,7 +32,8 @@
     "src/Gscript/Ci/GithubCiWatch.cs",
     "src/Gscript/Deploy/PostDeployProbe.cs",
     "gscript.json",
-    ".gitignore"
+    ".gitignore",
+    "CHANGELOG.md"
   ],
 
   "commitMessage": "feat(tool): C# dotnet-tool successor to the PowerShell module\n\nPorts the gscript substrate from PowerShell to a cross-platform C# dotnet\ntool (dotnet tool install -g gscript), unifying the parallel ps1+sh\nimplementations into one canonical, dependency-free CLI so consumers stop\nforking the template.\n\n- Preflight gates: trailing-null, file-size-sanity, structured-file parse\n  (JSON/XML/YAML + Razor CSS-comment scan; .ps1 via optional pwsh shell-out),\n  markdown-line-count, and the localmd-sourced leak-check.\n- Git layer: stale-lock auto-recovery, retry-with-backoff on lock collisions,\n  PAT-in-URL auth (redacted from logs), divergence guard.\n- CI watch with per-step transitions; post-deploy probe (redirect-off).\n- localmd PAT + leak-pattern resolution.\n\nFirst dogfood: this commit is pushed by the tool itself."
