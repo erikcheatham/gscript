@@ -2,6 +2,23 @@
 
 All notable changes to `gscript` will be documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+> Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
+
+## [2.0.0-alpha.5] — 2026-06-22
+
+Split-aware localmd resolution + a smarter file-size gate. Both lessons banked from the 2026-06-22 ApiZone-56 push, where (a) `--localmd C:\…\private\local.md` failed because the PAT had moved to `localmd/githubPAT.md` after the localmd single-file → topic-file split, and (b) the size gate refused a legitimate 28% deletion as "possible FUSE-truncation," and its reported working size (5565 CRLF bytes) didn't match the committed blob (5454 LF bytes), forcing a confusing post-hoc reconciliation.
+
+### Changed
+
+- **`Localmd.ResolvePat` is split-aware.** `--localmd` (and the `localmdPath` / `patFile` config) may now point at `local.md`, the `private/` root, the `localmd/` dir, OR `githubPAT.md` directly — all resolve. The given path is honored first; if it carries no PAT, the localmd root is searched (`localmd/githubPAT.md` preferred, then `githubPAT.md`, `local.md`, then remaining name-sorted `*.md` under `localmd/` and the root) for the first `github_pat_…` match. Single-PAT first-match (multi-account resolve-by-owner stays deferred). The "not found" error now lists every file searched.
+- **Leak-pattern loading is split-aware too.** The `## Leak patterns` section is now discovered across the same candidate files, so it can live in a topic file post-split instead of silently vacating — which would have made public-repo leak-checks pass vacuously (a real security regression). Fail-open posture for the no-section case is unchanged.
+- **`FileSizeSanityGate` is CRLF-normalized.** Shrink % is computed on the LF-normalized working size vs the (already-LF) HEAD blob, so the reported working size matches what git actually commits — no more "5565 vs committed 5454" gap (that 111-byte delta was exactly 111 CRLFs).
+- **`FileSizeSanityGate` discriminates truncation from deletion.** On a >threshold shrink the gate still REFUSES (fail-safe; `--allow-shrink` is the explicit override), but the message now corroborates structurally: trailing NULs or a mid-content ending → "LIKELY TRUNCATION; verify the tail before --allow-shrink"; a clean terminator (`}` `]` `)` `;` `>` quote backtick `.`) with no NULs → "likely a legitimate deletion; re-run with --allow-shrink \"<path>\" if intended." The heuristic only shapes the message, never the pass/fail decision.
+
+### Backward compatibility
+
+Purely additive. Existing `--localmd`/`localmdPath`/`patFile` values that point straight at a PAT-bearing file keep working (honored first). The gate's threshold and `--allow-shrink`/`--max-shrink-pct` semantics are unchanged; only the measurement (LF-normalized) and the failure message improved.
+
 ## [1.4.0] — 2026-05-28
 
 Ships `-NoDeploy` switch on `Invoke-Gscript`. Three coordinated mutations behind one parameter: auto-append `[skip ci]` to the commit subject (idempotent), force `WatchCi = $false`, force `ProbeEndpoints = @()`. Use for documentation pushes / IM banking / config tweaks where firing CI would be wasted wall-clock. Total wall-clock for a NoDeploy push drops to typically 5-10 seconds vs the ~6 min the regular ceremony would consume.
