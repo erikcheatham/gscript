@@ -22,6 +22,8 @@ public sealed class GscriptConfig
     public string CommitEmail { get; set; } = "ai-bot@example.com";
     public string? WorkingDirectory { get; set; }
     public string? LocalmdPath { get; set; }
+    public string? PatFile { get; set; }   // alias for LocalmdPath (operator-requested alias name); used iff LocalmdPath unset. Resolution: --localmd > localmdPath > patFile > default.
+    public string? LogFile { get; set; }    // append-only markdown push-log journal; --log flag overrides. Absent on both => no logging (backward-compatible).
     public bool NoDeployDefault { get; set; }
     public List<ProbeEndpointConfig> ProbeEndpoints { get; set; } = new();
 
@@ -39,6 +41,10 @@ public sealed class GscriptConfig
     public bool DryRun { get; set; }   // run gates + fetch/divergence, then stop before staging/commit/push
     public Dictionary<string, int> ShrinkageOverrides { get; set; } = new(); // relpath -> maxPct (per-file shrink exemption; CLI --allow-shrink sets 100)
     public int? MaxShrinkPctOverride { get; set; }   // CLI --max-shrink-pct: global shrink-gate relax for this push (wins over per-file + default)
+
+    // ── concurrent-work / runner-tree hygiene (2.0.0-alpha.6) ─────
+    public bool NoSync { get; set; }       // CLI --no-sync: disable the pre-push auto-fast-forward when origin advanced DISJOINTLY from FilesToStage. Default false = auto-FF on.
+    public bool RequireClean { get; set; } // CLI --require-clean: fail (not just warn) when files OUTSIDE FilesToStage are modified/untracked — the runner-shared-checkout hygiene gate.
 
     public static GscriptConfig Load(string path)
     {

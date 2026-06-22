@@ -77,7 +77,11 @@ public static partial class GscriptRunner
         if (ahead is not null) Log.DarkGray($"  local is {ahead} ahead, {behind} behind origin/main");
         else if (!fetch.Success) Log.DarkGray("  empty origin (first push)");
         if (behind is not null && behind != "0")
-            throw new GscriptException($"origin/main is {behind} commit(s) ahead. Resolve manually: git pull --rebase origin main");
+            SyncWithOrigin(cfg, workingDir, gitDir, ahead ?? "0", behind!);
+
+        // Runner-tree hygiene: warn (or fail, with --require-clean) about files loose in the working
+        // tree OUTSIDE FilesToStage — on a runner-shared checkout they can block the NEXT deploy's FF.
+        CheckLooseFiles(cfg, workingDir);
 
         // DRY RUN: preflight gates + auth + fetch/divergence verified; stop before touching the index.
         if (cfg.DryRun)
@@ -133,10 +137,20 @@ public static partial class GscriptRunner
         if (!push.Success) throw new GscriptException("git push failed after retries");
         Log.Green($"PUSHED: {shortSha} to origin/main.");
 
+        // Refresh the local tracking ref so `git status` is honest. A PAT-in-URL push does NOT update
+        // refs/remotes/origin/main (the "ahead by N" phantom + the divergence-trap it sets up for the
+        // next push). The `main:refs/remotes/origin/main` refspec forces the just-pushed origin tip
+        // onto the local tracking ref despite the embedded-PAT URL. Best-effort — never fails the push.
+        var refresh = GitRunner.InvokeGitWithRetry(
+            new[] { "fetch", "--quiet", pushUrl, "main:refs/remotes/origin/main" }, workingDir, gitDir, context: "post-push fetch");
+        if (refresh.Success) Log.DarkGray("  refreshed refs/remotes/origin/main (tracking ref honest).");
+        else Log.Yellow("  WARN: tracking-ref refresh failed (harmless; run `git fetch origin main` to sync).");
+
         // 10. CI watch (+ nested post-deploy probe — only when CI is watched and green)
+        CiWatchResult? ci = null;
         if (watchCi)
         {
-            var ci = GithubCiWatch.Watch(cfg.RepoOwner!, cfg.RepoName!, cfg.CiWorkflowFile, commitSha, pat,
+            ci = GithubCiWatch.Watch(cfg.RepoOwner!, cfg.RepoName!, cfg.CiWorkflowFile, commitSha, pat,
                 cfg.CiWatchMaxMinutes, cfg.CiWatchPollSeconds);
             if (!ci.Success)
                 throw new GscriptException($"CI did not complete successfully (conclusion={ci.Conclusion})");
@@ -149,6 +163,9 @@ public static partial class GscriptRunner
                     throw new GscriptException($"Probe failed for: {string.Join(", ", probe.Failures)}");
             }
         }
+
+        // 11. push-log journal (append-only; only on success, after push + CI verdict)
+        AppendPushLog(cfg, shortSha, noDeploy, watchCi, ci);
 
         Log.Green("SUCCESS: sprint shipped end-to-end.");
         return new RunResult(true, commitSha, shortSha);
@@ -164,10 +181,126 @@ public static partial class GscriptRunner
         return parts.Length > 1 ? subject + "\n" + parts[1] : subject;
     }
 
+    /// <summary>
+    /// Append a one-entry markdown push-log line per SUCCESSFUL push (the self-maintaining dated
+    /// journal). No-op when neither --log nor gscript.json logFile is set. Append-only via
+    /// File.AppendAllText (NEVER read-modify-write — sidesteps the trailing-line-clip truncation
+    /// class). repoName is in the line so multiple repos can point logFile at ONE shared journal.
+    /// Best-effort: a log-append failure is warned but never fails the (already-succeeded) push.
+    /// </summary>
+    private static void AppendPushLog(GscriptConfig cfg, string shortSha, bool noDeploy, bool watchCi, CiWatchResult? ci)
+    {
+        if (string.IsNullOrWhiteSpace(cfg.LogFile)) return;
+
+        string subject = (cfg.CommitMessage ?? "").Split('\n', 2)[0].Trim();
+        string repo = string.IsNullOrEmpty(cfg.RepoName) ? "(repo)" : cfg.RepoName!;
+        string tag = noDeploy ? "[nodeploy]" : "[deploy]";
+        string stamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+
+        string ciLine;
+        if (noDeploy) ciLine = "CI: skipped [skip ci]";
+        else if (!watchCi) ciLine = "CI: not watched (--no-watch)";
+        else if (ci is null) ciLine = "CI: not watched";
+        else if (ci.Conclusion == "skipped") ciLine = $"CI: skipped (paths-ignore) ({ci.Url})";
+        else ciLine = $"CI: {(ci.Conclusion == "success" ? "green" : ci.Conclusion)} ({ci.Url})";
+
+        string path = cfg.LogFile!;
+        var sb = new StringBuilder();
+        if (!File.Exists(path))
+        {
+            try { Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!); } catch { /* best-effort */ }
+            sb.Append("# Push log\n\n");
+        }
+        sb.Append($"- **{stamp}** `{shortSha}` {repo} {tag} -- {subject}\n");
+        sb.Append($"  {ciLine}\n");
+
+        try
+        {
+            File.AppendAllText(path, sb.ToString());
+            Log.DarkGray($"  push-log appended -> {path}");
+        }
+        catch (Exception ex)
+        {
+            Log.Yellow($"  WARN: push-log append failed ({ex.Message})");
+        }
+    }
+
     private static string? RevListCount(string workingDir, string a, string b)
     {
         var r = GitCommand.Run(new[] { "rev-list", a, "^" + b, "--count" }, workingDir);
         return r.Success ? r.Stdout.Trim() : null;
+    }
+
+    /// <summary>
+    /// Concurrent-work sync (alpha.6). origin/main advanced while we were editing. The decision tree:
+    /// (a) if the incoming commits touch ANY path in FilesToStage → real content conflict → refuse
+    /// (human reconciles); (b) else if --no-sync → refuse with the manual FF hint; (c) else if we
+    /// ALSO have local commits ahead (true divergence) → refuse (auto-FF can't apply over local
+    /// commits); (d) else (pure fast-forward, DISJOINT from our files) → auto-fast-forward onto origin
+    /// so the push is a clean FF and two agents editing different files integrate automatically.
+    /// </summary>
+    private static void SyncWithOrigin(GscriptConfig cfg, string workingDir, string gitDir, string ahead, string behind)
+    {
+        var incoming = GitCommand.Run(new[] { "diff", "--name-only", "HEAD", "FETCH_HEAD" }, workingDir)
+            .Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet();
+        var mine = cfg.FilesToStage.Select(f => f.Replace('\\', '/')).ToHashSet();
+        var overlap = incoming.Where(mine.Contains).OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+        if (overlap.Count > 0)
+            throw new GscriptException(
+                $"origin advanced {behind} commit(s) and the incoming change(s) touch file(s) you're pushing: " +
+                $"{string.Join(", ", overlap)}. Real conflict — reconcile manually: git pull --rebase origin main");
+
+        if (cfg.NoSync)
+            throw new GscriptException(
+                $"origin/main is {behind} commit(s) ahead (disjoint from your files); --no-sync is set. " +
+                "Fast-forward manually: git pull --ff-only origin main");
+
+        if (ahead != "0")
+            throw new GscriptException(
+                $"local and origin/main have diverged (local +{ahead}, origin +{behind}, disjoint files). " +
+                "Auto-FF can't apply over local commits — reconcile manually: git pull --rebase origin main");
+
+        Log.Cyan($"Auto-sync: origin advanced {behind} commit(s), disjoint from your files — fast-forwarding...");
+        var ff = GitRunner.InvokeGitWithRetry(new[] { "merge", "--ff-only", "FETCH_HEAD" }, workingDir, gitDir, context: "auto-FF");
+        if (!ff.Success)
+            throw new GscriptException(
+                "auto-FF failed (likely loose working-tree changes overlapping the incoming commits). " +
+                "Run `git status`, then `git pull --ff-only origin main` manually.");
+        Log.Green($"  fast-forwarded {behind} commit(s) from origin (your files untouched).");
+    }
+
+    /// <summary>
+    /// Runner-tree hygiene (alpha.6). On a runner-shared checkout (where the dev/authoring clone IS
+    /// the CI runner's deploy tree) files loose OUTSIDE FilesToStage — modified-tracked OR
+    /// untracked — don't block THIS push, but can break the NEXT deploy's `git pull --ff-only`.
+    /// Warn + list by default; with --require-clean, fail. Best-effort: a `git status` hiccup never
+    /// blocks the push.
+    /// </summary>
+    private static void CheckLooseFiles(GscriptConfig cfg, string workingDir)
+    {
+        var status = GitCommand.Run(new[] { "status", "--porcelain" }, workingDir);
+        if (!status.Success) return;
+
+        var mine = cfg.FilesToStage.Select(f => f.Replace('\\', '/')).ToHashSet();
+        var loose = new List<string>();
+        foreach (var line in status.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length < 4) continue;                      // porcelain v1: "XY path"
+            string path = line[3..].Trim();
+            int arrow = path.IndexOf(" -> ", StringComparison.Ordinal);
+            if (arrow >= 0) path = path[(arrow + 4)..];          // rename: take the destination path
+            path = path.Trim('"').Replace('\\', '/');
+            if (path.Length > 0 && !mine.Contains(path)) loose.Add(path);
+        }
+        if (loose.Count == 0) return;
+
+        Log.Yellow($"Heads-up: {loose.Count} file(s) loose in the working tree, outside --files:");
+        foreach (var l in loose) Log.Yellow($"    {l}");
+        Log.Yellow("  (On a runner-shared checkout these can block the NEXT deploy's `git pull --ff-only`.)");
+        if (cfg.RequireClean)
+            throw new GscriptException("--require-clean: working tree has files outside --files. Commit, stash, or .gitignore them first.");
     }
 
     private static ProbeEndpoint ToProbeEndpoint(ProbeEndpointConfig p)

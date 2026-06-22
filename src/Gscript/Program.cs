@@ -13,7 +13,7 @@ return Cli.Run(args);
 /// </summary>
 internal static class Cli
 {
-    private const string Version = "gscript 2.0.0-alpha.3";
+    private const string Version = "gscript 2.0.0-alpha.6";
 
     public static int Run(string[] args)
     {
@@ -47,8 +47,8 @@ internal static class Cli
     private static GscriptConfig BuildConfig(string[] args)
     {
         string? configPath = null, files = null, message = null, repoOwner = null,
-                repoName = null, workflow = null, workingDir = null, localmd = null;
-        bool noDeploy = false, noWatch = false, dryRun = false;
+                repoName = null, workflow = null, workingDir = null, localmd = null, logFile = null;
+        bool noDeploy = false, noWatch = false, dryRun = false, noSync = false, requireClean = false;
         int? maxShrinkPct = null;
         var allowShrink = new List<string>();
 
@@ -64,9 +64,12 @@ internal static class Cli
                 case "--workflow": workflow = Next(args, ref i); break;
                 case "--working-dir": workingDir = Next(args, ref i); break;
                 case "--localmd": localmd = Next(args, ref i); break;
+                case "--log": logFile = Next(args, ref i); break;
                 case "--no-deploy": noDeploy = true; break;
                 case "--no-watch": noWatch = true; break;
                 case "--dry-run": dryRun = true; break;
+                case "--no-sync": noSync = true; break;
+                case "--require-clean": requireClean = true; break;
                 case "--max-shrink-pct": maxShrinkPct = int.Parse(Next(args, ref i)); break;
                 case "--allow-shrink": allowShrink.Add(Next(args, ref i)); break;
                 default: throw new GscriptException($"unknown option '{args[i]}'");
@@ -90,9 +93,13 @@ internal static class Cli
         if (workflow is not null) cfg.CiWorkflowFile = workflow;
         if (workingDir is not null) cfg.WorkingDirectory = workingDir;
         if (localmd is not null) cfg.LocalmdPath = localmd;
+        if (logFile is not null) cfg.LogFile = logFile;
+        cfg.LocalmdPath ??= cfg.PatFile;   // patFile json field is an alias; --localmd + localmdPath win over it
         if (noDeploy) cfg.NoDeploy = true;
         if (noWatch) cfg.WatchCi = false;
         if (dryRun) cfg.DryRun = true;
+        if (noSync) cfg.NoSync = true;
+        if (requireClean) cfg.RequireClean = true;
         if (maxShrinkPct is int mp) cfg.MaxShrinkPctOverride = mp;
         foreach (var p in allowShrink) cfg.ShrinkageOverrides[p] = 100;
 
@@ -119,6 +126,8 @@ internal static class Cli
         Console.WriteLine("  --no-deploy          append [skip ci]; skip CI watch + probes");
         Console.WriteLine("  --no-watch           push but don't watch CI");
         Console.WriteLine("  --dry-run            run gates + divergence check, then stop (no commit/push)");
+        Console.WriteLine("  --no-sync            disable the pre-push auto-fast-forward when origin advanced disjointly");
+        Console.WriteLine("  --require-clean      fail if files outside --files are modified/untracked (runner-tree hygiene)");
         Console.WriteLine("  --max-shrink-pct N   relax file-size + markdown shrink gates to N% for this push");
         Console.WriteLine("  --allow-shrink <p>   exempt one path from the shrink gates (repeatable)");
         Console.WriteLine("  --config <path>      gscript.json (default: ./gscript.json if present)");
@@ -126,7 +135,8 @@ internal static class Cli
         Console.WriteLine("  --repo-name <r>      override repo name");
         Console.WriteLine("  --workflow <f>       CI workflow filename (default: deploy.yml)");
         Console.WriteLine("  --working-dir <d>    repo root (default: current directory)");
-        Console.WriteLine("  --localmd <path>     localmd path (default: %USERPROFILE%\\private\\local.md)");
+        Console.WriteLine("  --localmd <path>     localmd/PAT path (default: %USERPROFILE%\\private\\local.md; or gscript.json localmdPath/patFile)");
+        Console.WriteLine("  --log <path>         append a markdown push-log entry per successful push (or gscript.json logFile)");
         Console.WriteLine("  -h, --help           this help");
         Console.WriteLine("  -v, --version        version");
         Console.WriteLine();

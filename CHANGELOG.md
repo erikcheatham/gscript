@@ -4,6 +4,24 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.6] — 2026-06-22
+
+Concurrent-work + runner-tree hygiene. Three features that let two agents (or two machines) push to the same repo concurrently without manual pull-dances, and that defend a *runner-shared checkout* — one where a CI runner's deploy tree is also a dev/authoring clone — from having its `git pull --ff-only` blocked by loose working-tree files.
+
+### Added
+
+- **Auto-sync (`SyncWithOrigin`)** — when `origin/main` advanced while you were editing, the divergence guard no longer hard-refuses. It diffs the incoming commits against `--files`: if they're **disjoint** and it's a pure fast-forward, gscript auto-`merge --ff-only`s your tree first, then commits + pushes — so two agents editing *different* files integrate automatically. It refuses (with a manual-reconcile hint) only on a real **`--files` overlap** (content conflict) or **true divergence** (you also have local commits ahead). `--no-sync` opts out.
+- **Post-push tracking-ref refresh** — a PAT-in-URL push does **not** update `refs/remotes/origin/main`, which leaves the misleading "ahead by N" phantom *and* arms a divergence-trap for the next push. gscript now runs `git fetch <pushUrl> main:refs/remotes/origin/main` after a successful push (the refspec forces the just-pushed tip onto the tracking ref despite the embedded-PAT URL) so `git status` is honest. Best-effort — a refresh failure warns but never fails the already-succeeded push.
+- **Loose-file guard (`CheckLooseFiles`)** — before pushing, lists files modified/untracked **outside** `--files`. On a runner-shared checkout (dev clone == the CI runner's deploy tree) those can block the *next* deploy's `git pull --ff-only`. Warns by default; **`--require-clean`** fails hard.
+
+### Fixed
+
+- `--version` was stale at `2.0.0-alpha.4` (the const in `Program.cs` lagged the package version). Synced to `2.0.0-alpha.6`.
+
+### Backward compatibility
+
+Additive. Auto-sync only ever *fast-forwards* (never merges/rebases content) and only when the incoming commits don't touch your `--files`, so it can't silently integrate conflicting work; the old hard-refuse behavior is one `--no-sync` away. The loose-file guard is warn-only unless you pass `--require-clean`.
+
 ## [2.0.0-alpha.5] — 2026-06-22
 
 Split-aware localmd resolution + a smarter file-size gate. Both lessons banked from the 2026-06-22 ApiZone-56 push, where (a) `--localmd C:\…\private\local.md` failed because the PAT had moved to `localmd/githubPAT.md` after the localmd single-file → topic-file split, and (b) the size gate refused a legitimate 28% deletion as "possible FUSE-truncation," and its reported working size (5565 CRLF bytes) didn't match the committed blob (5454 LF bytes), forcing a confusing post-hoc reconciliation.
