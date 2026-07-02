@@ -13,7 +13,7 @@ return Cli.Run(args);
 /// </summary>
 internal static class Cli
 {
-    private const string Version = "gscript 2.0.0-alpha.6";
+    private const string Version = "gscript 2.0.0-alpha.8";
 
     public static int Run(string[] args)
     {

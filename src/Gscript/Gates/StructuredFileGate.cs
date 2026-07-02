@@ -123,9 +123,18 @@ public static partial class StructuredFileGate
     {
         // Reuse PowerShell's own parser via a graceful shell-out to `pwsh`. If pwsh isn't on PATH,
         // skip (pass) — no PowerShell SDK dependency is dragged into the tool.
+        //
+        // The target path travels via an ENVIRONMENT VARIABLE, not a process argument: with
+        // `pwsh -Command "<string>"`, trailing process arguments do NOT populate $args (they're
+        // treated as part of the command text per about_pwsh), so an $args[0]-based script sees
+        // $null and ParseFile reports "[line 0 col 0] The file could not be read: Cannot process
+        // argument because the value of argument 'path' is not valid" — for EVERY file, healthy
+        // or not. Env-var passing is quoting-proof and pwsh-version-proof. The path is also
+        // rooted (ParseFile wants a full path; --files delivers repo-relative shapes).
+        const string pathEnvVar = "GSCRIPT_PS1_LINT_PATH";
         const string script =
             "$t=$null;$e=$null;" +
-            "[System.Management.Automation.Language.Parser]::ParseFile($args[0],[ref]$t,[ref]$e)|Out-Null;" +
+            "[System.Management.Automation.Language.Parser]::ParseFile($env:GSCRIPT_PS1_LINT_PATH,[ref]$t,[ref]$e)|Out-Null;" +
             "if($e -and $e.Count){foreach($x in $e){\"[line $($x.Extent.StartLineNumber) col $($x.Extent.StartColumnNumber)] $($x.Message)\"};exit 1}else{exit 0}";
 
         try
@@ -142,7 +151,7 @@ public static partial class StructuredFileGate
             psi.ArgumentList.Add("-NonInteractive");
             psi.ArgumentList.Add("-Command");
             psi.ArgumentList.Add(script);
-            psi.ArgumentList.Add(path);   // → $args[0] inside the command
+            psi.Environment[pathEnvVar] = Path.GetFullPath(path);
 
             using var proc = Process.Start(psi);
             if (proc is null) return GateResult.Pass("PS1 lint skipped (pwsh not available)");

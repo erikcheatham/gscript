@@ -4,6 +4,12 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.8] — 2026-07-01
+
+### Fixed
+
+- **`StructuredFileGate.CheckPs1` never received the file path — every `.ps1` failed the gate.** The parse-lint shells out to `pwsh -Command "<script>"` and passed the target path as a trailing process argument, expecting it in `$args[0]`. With a STRING `-Command`, trailing arguments do NOT populate `$args` (per about_pwsh they're consumed as command text), so the script saw `$null` and `ParseFile` reported `[line 0 col 0] The file could not be read: Cannot process argument because the value of argument "path" is not valid` for EVERY `.ps1`, healthy or not — absolute path made no difference (the interim alpha.7 rooted-path fix was a misdiagnosis; superseded within the hour, never pushed). Fix: the path now travels via the `GSCRIPT_PS1_LINT_PATH` environment variable on the child process (quoting-proof, pwsh-version-proof) and is rooted via `Path.GetFullPath` (`ParseFile` wants a full path; `--files` delivers repo-relative shapes). Latent since alpha.1 — this branch had never run: the first `.ps1` staged through the C# tool was a consumer repo's WAF-updater script on 2026-07-01.
+
 ## [2.0.0-alpha.6] — 2026-06-22
 
 Concurrent-work + runner-tree hygiene. Three features that let two agents (or two machines) push to the same repo concurrently without manual pull-dances, and that defend a *runner-shared checkout* — one where a CI runner's deploy tree is also a dev/authoring clone — from having its `git pull --ff-only` blocked by loose working-tree files.
