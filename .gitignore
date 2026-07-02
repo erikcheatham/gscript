@@ -38,3 +38,8 @@ desktop.ini
 **/[Bb]in/
 **/[Oo]bj/
 *.user
+.vs/
+**/.vs/
+
+nupkg/
+artifacts/
