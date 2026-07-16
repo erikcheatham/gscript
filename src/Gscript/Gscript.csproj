@@ -17,7 +17,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>gscript</ToolCommandName>
     <PackageId>gscrpt</PackageId>
-    <Version>2.0.0-alpha.8</Version>
+    <Version>2.0.0-alpha.9</Version>
     <Authors>erikcheatham</Authors>
     <Description>Self-healing, cross-platform git-push + dev-ops ceremony tool. Content-shape preflight gates (trailing-null, file-size, structured-file parse, markdown shrinkage, leak-check), localmd PAT auth, stale-lock recovery, retry-on-collision, per-step CI watch, post-deploy probes. The C# successor to the gscript PowerShell module.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

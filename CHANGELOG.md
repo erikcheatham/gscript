@@ -4,6 +4,20 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.9] — 2026-07-15
+
+The `gscript im` command family — the IM index/linter ("imindex") planned in the hub's tooling canon. First lint target: the operator hub `CLAUDE.md` itself.
+
+### Added
+
+- **`gscript im lint`** — three checks over the institutional-memory hub: (1) **line-budget enforcement** (default 450, `--budget`; ERROR when over, WARN at `--warn-pct` (default 90%) of budget); (2) **stale-path scan** — every absolute Windows path token in the hub (and, with `--deep`, in `localmd/*.md` beside it) is existence-checked when it lives under the canonical `C:\work\` root (missing → ERROR); pre-relocation **archived roots** are WARN-only (a TODO may name them deliberately) and are operator data, so they are never hardcoded — they load from `<hubDir>\im.json` `archivedRoots` (private by construction) plus repeatable `--archived-root` flags; everything else — other machines' paths, ProgramData, placeholders — is unverifiable and listed only under `--verbose`; (3) **broken cross-ref detection** — backtick `localmd/….md` refs must resolve beside the hub (missing → ERROR). Exit 1 on any ERROR so the lint can gate a ceremony. On non-Windows hosts, existence checks are skipped (budget + cross-refs still enforced). False-positive guards earned in the first dogfood run: URL tails (`https://…`) can't match as fake drive letters, and space-containing paths truncated at the token boundary are prefix-checked against the parent directory instead of ERRORing.
+- **`gscript im digest`** — generated index of the hub: budget usage, the "Last substantive edit" stamp, and a heading map with line numbers + per-section line counts.
+- **Hub resolution** — `--hub <path>` wins; otherwise the hub defaults to `CLAUDE.md` in the directory of the repo's `gscript.json` `localmdPath`/`patFile`, so `gscript im lint` works bare from any consuming repo.
+
+### Backward compatibility
+
+Purely additive: a new top-level command; `push` and `task` are untouched.
+
 ## [2.0.0-alpha.8] — 2026-07-01
 
 ### Fixed

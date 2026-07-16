@@ -1,5 +1,6 @@
 using Gscript;
 using Gscript.Git;
+using Gscript.Im;
 using Gscript.Local;
 using Gscript.Tasks;
 
@@ -13,7 +14,7 @@ return Cli.Run(args);
 /// </summary>
 internal static class Cli
 {
-    private const string Version = "gscript 2.0.0-alpha.8";
+    private const string Version = "gscript 2.0.0-alpha.9";
 
     public static int Run(string[] args)
     {
@@ -33,8 +34,10 @@ internal static class Cli
                 }
                 case "task":
                     return TaskCommands.Run(args[1..]);
+                case "im":
+                    return ImCommands.Run(args[1..]);
                 default:
-                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript task', or 'gscript --help'.");
+                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript task', 'gscript im', or 'gscript --help'.");
                     return 1;
             }
         }
@@ -119,6 +122,7 @@ internal static class Cli
         Console.WriteLine("USAGE:");
         Console.WriteLine("  gscript push [options]");
         Console.WriteLine("  gscript task <post|list|show|approve|reject|run>   (the comms task-bus)");
+        Console.WriteLine("  gscript im <lint|digest>                           (the IM index/linter)");
         Console.WriteLine();
         Console.WriteLine("OPTIONS:");
         Console.WriteLine("  --files <a,b,c>      comma-separated paths to stage (explicit; never `git add .`)");
