@@ -42,6 +42,16 @@ public sealed class GscriptConfig
     public Dictionary<string, int> ShrinkageOverrides { get; set; } = new(); // relpath -> maxPct (per-file shrink exemption; CLI --allow-shrink sets 100)
     public int? MaxShrinkPctOverride { get; set; }   // CLI --max-shrink-pct: global shrink-gate relax for this push (wins over per-file + default)
 
+    // ── credential source (2.0.0-alpha.11) ────────────────────────
+    /// <summary>Ordered credential sources, e.g. <c>["githubapp", "localmd"]</c>. Empty/absent =
+    /// <c>["localmd"]</c>, so existing consumers are unaffected until they opt in. First source that
+    /// yields a token wins; a source that is configured and BROKEN fails rather than downgrading.</summary>
+    public List<string> CredentialSource { get; set; } = new();
+
+    /// <summary>GitHub App identifiers + TPM cert subject. All three are NON-SECRET by design —
+    /// the secret is the private key, which never leaves the machine's TPM.</summary>
+    public GitHubAppConfig GitHubApp { get; set; } = new();
+
     // ── concurrent-work / runner-tree hygiene (2.0.0-alpha.6) ─────
     public bool NoSync { get; set; }       // CLI --no-sync: disable the pre-push auto-fast-forward when origin advanced DISJOINTLY from FilesToStage. Default false = auto-FF on.
     public bool RequireClean { get; set; } // CLI --require-clean: fail (not just warn) when files OUTSIDE FilesToStage are modified/untracked — the runner-shared-checkout hygiene gate.
@@ -87,6 +97,20 @@ public sealed class LeakGateConfig
 {
     /// <summary>"auto" (on when visibility==public or leakCheckRequired), "true", or "false".</summary>
     public string Enabled { get; set; } = "auto";
+}
+
+/// <summary>
+/// The non-secret half of the GitHub App credential source. App id and installation id are public
+/// identifiers; the signing key is a non-exportable TPM key found by <see cref="CertSubject"/>, so
+/// one config works on every writer seat with nothing per-machine to track.
+/// </summary>
+public sealed class GitHubAppConfig
+{
+    public long AppId { get; set; }
+    public long InstallationId { get; set; }
+
+    /// <summary>Subject DN of the cert whose TPM-backed key signs the App JWT, e.g. <c>CN=MyApp</c>.</summary>
+    public string? CertSubject { get; set; }
 }
 
 public sealed class ProbeEndpointConfig

@@ -1,4 +1,5 @@
 using Gscript;
+using Gscript.Credentials;
 using Gscript.Git;
 using Gscript.Im;
 using Gscript.Local;
@@ -14,7 +15,7 @@ return Cli.Run(args);
 /// </summary>
 internal static class Cli
 {
-    private const string Version = "gscript 2.0.0-alpha.10";
+    private const string Version = "gscript 2.0.0-alpha.11";
 
     public static int Run(string[] args)
     {
@@ -36,13 +37,16 @@ internal static class Cli
                     return TaskCommands.Run(args[1..]);
                 case "im":
                     return ImCommands.Run(args[1..]);
+                case "cred":
+                    return CredCommands.Run(args[1..]);
                 default:
-                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript task', 'gscript im', or 'gscript --help'.");
+                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript task', 'gscript im', 'gscript cred', or 'gscript --help'.");
                     return 1;
             }
         }
         catch (GscriptException ex) { Log.Red($"gscript: {ex.Message}"); return 1; }
         catch (LocalmdException ex) { Log.Red($"gscript: {ex.Message}"); return 1; }
+        catch (CredentialSourceException ex) { Log.Red($"gscript: {ex.Message}"); return 1; }
         catch (StaleLockClearAbortedException ex) { Log.Red($"gscript: {ex.Message}"); return 1; }
         catch (Exception ex) { Log.Red($"gscript: unexpected error: {ex.Message}"); return 1; }
     }
@@ -123,6 +127,7 @@ internal static class Cli
         Console.WriteLine("  gscript push [options]");
         Console.WriteLine("  gscript task <post|list|show|approve|reject|run>   (the comms task-bus)");
         Console.WriteLine("  gscript im <lint|digest>                           (the IM index/linter)");
+        Console.WriteLine("  gscript cred test                                  (credential source read-back / TPM seal check)");
         Console.WriteLine();
         Console.WriteLine("OPTIONS:");
         Console.WriteLine("  --files <a,b,c>      comma-separated paths to stage (explicit; never `git add .`)");

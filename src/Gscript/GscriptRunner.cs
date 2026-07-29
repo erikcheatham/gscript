@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Gscript.Ci;
+using Gscript.Credentials;
 using Gscript.Deploy;
 using Gscript.Gates;
 using Gscript.Git;
@@ -62,8 +63,10 @@ public static partial class GscriptRunner
         // 1. stale-lock auto-recovery (BEFORE any git op, so fetch/add/commit don't trip a stale lock)
         GitRunner.ClearStaleGitLocks(gitDir);
 
-        // 2. PAT from localmd (BEFORE fetch — the fetch URL embeds it)
-        string pat = Localmd.ResolvePat(cfg.LocalmdPath);
+        // 2. push credential (BEFORE fetch — the fetch URL embeds it). Resolved through
+        //    ICredentialSource so the mechanism (localmd PAT today, minted App installation token
+        //    once Phase B lands) is invisible here; the URL shape is identical either way.
+        string pat = CredentialResolver.ResolvePushToken(cfg);
 
         // 3. preflight gates over the working files (refuse to stage corrupt bytes)
         RunWorkingFileGates(cfg, workingDir);
