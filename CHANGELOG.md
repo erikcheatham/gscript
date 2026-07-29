@@ -4,6 +4,22 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.11] — 2026-07-29
+
+Phase A of the GitHub-App credential source (`docs/CREDENTIAL-SOURCE.md`): the `ICredentialSource` seam and the TPM key source, plus the command that verifies a seal. Non-breaking — the default resolution order is unchanged, so a repo behaves identically until its `gscript.json` opts in.
+
+### Added
+
+- **`ICredentialSource` seam.** The push credential now resolves through an ordered `credentialSource` list in `gscript.json` (absent/empty = `["localmd"]`). `GscriptRunner` no longer calls `Localmd.ResolvePat` directly — it asks the resolver, so the mechanism (a standing PAT read from a file today, a minted installation token once Phase B lands) is invisible at the call site. The push URL shape does not change at all: `x-access-token` is a placeholder username for a PAT and the *required* username for an App installation token.
+- **`TpmCertSource`** — locates the App signing key as a non-exportable TPM-resident RSA key, held as a cert in `Cert:\CurrentUser\My` and found by **subject**, not thumbprint: every writer seat seals its own key so thumbprints differ per machine, and subject lookup means one config works on every seat. Subject matching tolerates the DN-spacing disagreement between certutil and `X509Certificate2.Subject`, because a near-miss there reads to an operator as "the seal failed".
+- **`gscript cred test`** — read-back / sign check over the configured machinery. Reports the `credentialSource` order, that a PAT resolves (its *length*, never its value), and for the TPM key: the CNG provider name, that a SHA256/Pkcs1 signature round-trips against the cert's public key, and that the private key **refuses export**. Exit 1 on any configured check failing, so it can gate a provisioning runbook. Deliberately verify-before-delete: the import sequence ends with "verify signing, THEN delete the PEM", and a lost TPM key is recoverable only by generating a fresh App key.
+
+### Design notes worth keeping
+
+- **No silent downgrade.** A source that is merely *absent* falls through to the next; a source that is *configured and broken* fails. Quietly reverting from a short-lived minted token to a standing PAT would defeat the entire point of the exercise, and would do it invisibly.
+- **The provider check is load-bearing, and "it signs" is not enough.** A software-backed key signs perfectly happily, so only the CNG provider name distinguishes a key sealed into the TPM from a plainly imported one. A null provider is treated as the same refusal as a wrong one. `cred test` likewise treats a *successful* private-key export as a FAILURE — a key that exports is a key that can be stolen, meaning `NoExport` did not take.
+- **There is no `cred set`, on purpose.** A subcommand accepting key material would have to take it as an argument or a file path, reintroducing the exact disclosure surface this design removes. Sealing stays a one-time out-of-band certutil import.
+
 ## [2.0.0-alpha.10] — 2026-07-29
 
 Fail clean, not modal. First shipped piece of the GitHub-App credential source (`docs/CREDENTIAL-SOURCE.md` Phase C) — deliberately landed ahead of Phases A/B because it is standalone hardening and fixes a live annoyance.
