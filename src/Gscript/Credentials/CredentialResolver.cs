@@ -38,15 +38,15 @@ public static class CredentialResolver
                     break;
 
                 case "githubapp":
-                    // Phase A ships the seam and the TPM key source; the App-JWT -> installation
-                    // token mint is Phase B. Fail LOUDLY rather than falling through to localmd:
-                    // a repo that has opted in has (presumably) already stripped its PAT, and a
-                    // silent downgrade there would be a confusing 401 instead of a clear "not yet".
-                    throw new CredentialSourceException(
-                        "credentialSource 'githubapp' is not wired yet — Phase A ships the seam and "
-                        + "the TPM key source only. Verify the seal with 'gscript cred test', and "
-                        + "keep 'localmd' in credentialSource until Phase B (installation-token "
-                        + "minting) lands. See docs/CREDENTIAL-SOURCE.md § Build sequence.");
+                    // Guard-and-throw so the platform analyzer knows the construction below is
+                    // Windows-only. The TPM is reached through the Windows platform crypto provider,
+                    // so there is no cross-platform form of this source — a POSIX seat keeps localmd.
+                    if (!OperatingSystem.IsWindows())
+                        throw new CredentialSourceException(
+                            "credentialSource 'githubapp' needs Windows (the TPM is reached via the "
+                            + "platform crypto provider). Keep 'localmd' in credentialSource on this host.");
+                    sources.Add(new GitHubAppSource(cfg.GitHubApp, cfg.RepoName, cfg.FilesToStage));
+                    break;
 
                 default:
                     throw new CredentialSourceException(

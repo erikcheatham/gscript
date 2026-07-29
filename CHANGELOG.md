@@ -4,6 +4,35 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.12] — 2026-07-29
+
+Phase B of the GitHub-App credential source: `credentialSource: ["githubapp"]` now works end to end. The standing secret stops being a pushable token in a readable file and becomes a TPM-sealed key whose only job is signing a ≤10-minute assertion.
+
+### Added
+
+- **`GitHubAppSource`** — signs an App JWT with the TPM key, mints a ~1-hour installation token, hands it to the existing `x-access-token:` push URL. The URL shape is unchanged: that username is a placeholder for a PAT and the *required* username for an installation token.
+- **`AppJwt`** — RS256, `iss` = App ID, lifetime clamped to GitHub's 10-minute ceiling, `iat` backdated 60s for clock skew (without it a fast clock returns 401, which reads like a broken key rather than a wrong time). Hand-rolled rather than taking a JWT dependency: a third-party package on the component holding source-write authority is precisely the supply-chain edge this design exists to shrink.
+- **`gscript cred test --mint`** — opt-in live check that signs and mints for real, proving what the key probe cannot: that GitHub accepts this machine as the App and the installation still grants what a push needs. Default `cred test` remains fully offline.
+
+### The task bus works again — file-backed transport
+
+`gscript task <post|list|show|approve|reject|run>` was fully built and completely unreachable: `TaskBusClient` resolved to claude-comms on `localhost:8767`, which no longer runs. The verbs, the `TaskTarget` payload and `run`'s execute-and-record-result path were all already there.
+
+- **`ITaskBus`** — transport seam. `TaskBusClient` (HTTP) now implements it alongside the new file store.
+- **`FileTaskBus`** — one indented JSON document per task in a directory. Indented on purpose: a human reads this file before approving it. Write-then-move so a reader never sees half a task; a conflicted or hand-edited file is skipped by `list` rather than crashing it; task ids are path-validated because the id reaches us through a file that syncs between machines.
+- **`TaskBus.Resolve`** — file transport is now the DEFAULT; the HTTP bus is selected only when `--comms-url`/`COMMS_URL` is explicitly supplied. Directory comes from `GSCRIPT_TASKS_DIR`, else a `tasks/` folder beside the operator's localmd — which is already a synced private repo, so a task posted on one writer seat replicates to the others with no extra machinery and never lands in a public tree.
+
+**Why this shape and not a shell queue.** The payload is a `TaskTarget` — repo, files, message, no-deploy — not a command string. So whatever can write to the task directory can only ever PROPOSE a gscript push, which still runs every preflight gate, the leak-check and the divergence guard when it executes. It cannot ask the machine to run something arbitrary, and no new execution primitive exists. Propose and execute stay on opposite sides of the operator: an agent writes the proposal, a human approves it, gscript does the work it already knew how to do. That is the same authority-plane rule the platform applies elsewhere — a lower plane never widens into a higher one.
+
+### Least privilege per push, not per install
+
+The App may hold Contents+Workflows R/W across every installed repo, but each mint requests **one repository** and asks for `workflows: write` **only when the staged files actually include something under `.github/workflows/`**. An ordinary push therefore carries a token that cannot rewrite a workflow — which matters because a workflow file is the one artifact a compromised push could use to escalate into the self-hosted runner. Omitting the mint body entirely would have yielded the installation's full reach: correct-but-lazy, and the opposite of the intent.
+
+### Notes
+
+- **No length validation on the minted token, deliberately.** GitHub is moving installation tokens to a longer stateless `ghs_` format and has warned that code with hardcoded length assumptions will break. The token is treated as an opaque string throughout. `GitRunner.Redact` already matches `x-access-token:[^@\s]+@`, so it is format- and length-agnostic too.
+- Mint failures map each HTTP status to its actual operator action — 401 to a wrong app id, a deleted App key, or a skewed clock; 404 to a wrong installation id or an uninstalled App; 422 to a permission the installation does not grant.
+
 ## [2.0.0-alpha.11] — 2026-07-29
 
 Phase A of the GitHub-App credential source (`docs/CREDENTIAL-SOURCE.md`): the `ICredentialSource` seam and the TPM key source, plus the command that verifies a seal. Non-breaking — the default resolution order is unchanged, so a repo behaves identically until its `gscript.json` opts in.

@@ -69,7 +69,7 @@ public static class TaskCommands
             NoDeploy = noDeploy,
         };
 
-        var bus = TaskBusClient.FromEnv(url, token);
+        var bus = TaskBus.Resolve(url, token);
         var id = bus.Create(from!, to, subject!, desc, target);
         Log.Green($"task posted: {id}  (proposed, {from} -> {to ?? "anyone"})");
         return 0;
@@ -90,7 +90,7 @@ public static class TaskCommands
                 default: throw new GscriptException($"task list: unknown option '{args[i]}'");
             }
 
-        var bus = TaskBusClient.FromEnv(url, token);
+        var bus = TaskBus.Resolve(url, token);
         var tasks = bus.List(status, createdBy, assignedTo);
         if (tasks.Count == 0) { Log.Plain("(no tasks)"); return 0; }
         foreach (var t in tasks) PrintRow(t);
@@ -101,7 +101,7 @@ public static class TaskCommands
     private static int Show(string[] args)
     {
         var (id, _, url, token, _) = ParseIdAction(args, "show");
-        var bus = TaskBusClient.FromEnv(url, token);
+        var bus = TaskBus.Resolve(url, token);
         var t = bus.Get(id) ?? throw new GscriptException($"task {id} not found");
 
         Log.Cyan($"task {t.TaskId}  [{t.Status}]");
@@ -125,7 +125,7 @@ public static class TaskCommands
     private static int ApproveCmd(string[] args)
     {
         var (id, by, url, token, _) = ParseIdAction(args, "approve");
-        var bus = TaskBusClient.FromEnv(url, token);
+        var bus = TaskBus.Resolve(url, token);
         bus.Approve(id, by);
         Log.Green($"task {id}: approved");
         return 0;
@@ -134,7 +134,7 @@ public static class TaskCommands
     private static int RejectCmd(string[] args)
     {
         var (id, by, url, token, reason) = ParseIdAction(args, "reject");
-        var bus = TaskBusClient.FromEnv(url, token);
+        var bus = TaskBus.Resolve(url, token);
         bus.Reject(id, by, reason);
         Log.Yellow($"task {id}: rejected{(string.IsNullOrEmpty(reason) ? "" : $"  ({reason})")}");
         return 0;
@@ -160,7 +160,7 @@ public static class TaskCommands
         if (id is null) throw new GscriptException("task run: <task_id> required");
         by ??= "operator";
 
-        var bus = TaskBusClient.FromEnv(url, token);
+        var bus = TaskBus.Resolve(url, token);
         var task = bus.Get(id) ?? throw new GscriptException($"task {id} not found");
         if (task.Status != "approved" && !force)
             throw new GscriptException($"task {id} is '{task.Status}', not 'approved'. Approve it first, or pass --force.");

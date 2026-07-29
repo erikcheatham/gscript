@@ -12,7 +12,7 @@ namespace Gscript.Tasks;
 /// the rest of the tool. Server errors surface as <see cref="GscriptException"/> with the bus's
 /// own error string; a down bus surfaces a clear "unreachable" message.
 /// </summary>
-public sealed class TaskBusClient
+public sealed class TaskBusClient : ITaskBus
 {
     private static readonly JsonSerializerOptions J = new()
     {

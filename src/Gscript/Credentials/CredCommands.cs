@@ -32,6 +32,7 @@ public static class CredCommands
         string configPath = "gscript.json";
         string? subjectOverride = null;
         string? localmdOverride = null;
+        bool mint = false;
         for (int i = 1; i < args.Length; i++)
         {
             switch (args[i])
@@ -39,6 +40,7 @@ public static class CredCommands
                 case "--config": configPath = Next(args, ref i); break;
                 case "--subject": subjectOverride = Next(args, ref i); break;
                 case "--localmd": localmdOverride = Next(args, ref i); break;
+                case "--mint": mint = true; break;
                 default:
                     Log.Red($"gscript cred test: unknown option '{args[i]}'");
                     return 1;
@@ -97,7 +99,25 @@ public static class CredCommands
         }
         else
         {
-            failures += ProbeTpm(subject!);
+            // Tracked separately from the running total: a localmd failure must not suppress the
+            // mint check, because the two are independent mechanisms and the whole point of the
+            // migration is that the App path works WITHOUT a healthy PAT.
+            int tpmFailures = ProbeTpm(subject!);
+            failures += tpmFailures;
+
+            // --mint is the only check that touches the network, so it is opt-in: the default
+            // `cred test` stays runnable on a plane and during provisioning. When asked, it proves
+            // the part the key probe cannot — that GitHub accepts this machine's key AS the App and
+            // that the installation still grants what a push needs.
+            if (mint && tpmFailures == 0)
+            {
+                cfg.GitHubApp.CertSubject = subject;
+                failures += ProbeMint(cfg);
+            }
+            else if (mint)
+            {
+                Log.Yellow("  SKIP  --mint not attempted: fix the TPM key checks above first.");
+            }
         }
 
         if (failures > 0)
@@ -161,6 +181,28 @@ public static class CredCommands
         return bad;
     }
 
+    /// <summary>Live end-to-end check: sign an App JWT with the TPM key and mint a real
+    /// installation token. Reports that it worked and its length — never the value.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static int ProbeMint(GscriptConfig cfg)
+    {
+        Log.Cyan("Installation-token mint (live, --mint)...");
+        try
+        {
+            var src = new GitHubAppSource(cfg.GitHubApp, cfg.RepoName, cfg.FilesToStage);
+            Log.DarkGray($"  {src.Describe()}");
+            var token = src.GetPushToken();
+            Log.Green($"  OK  minted a push token ({token.Length} chars) — the full chain works: "
+                + "TPM signature -> App JWT -> installation token.");
+            return 0;
+        }
+        catch (CredentialSourceException ex)
+        {
+            Log.Red($"  FAIL  {ex.Message}");
+            return 1;
+        }
+    }
+
     private static string Next(string[] args, ref int i)
     {
         if (i + 1 >= args.Length) throw new GscriptException($"option {args[i]} needs a value");
@@ -170,7 +212,7 @@ public static class CredCommands
     private static void PrintUsage()
     {
         Console.WriteLine("""
-            gscript cred test [--config <gscript.json>] [--subject CN=<app>] [--localmd <path>]
+            gscript cred test [--config <gscript.json>] [--subject CN=<app>] [--localmd <path>] [--mint]
 
               Read-back / sign check over the configured credential machinery. Prints provenance
               and diagnostics ONLY — never a credential value.
@@ -180,6 +222,9 @@ public static class CredCommands
                 2. localmd  — that a PAT resolves (reports its length, never its value)
                 3. TPM      — that githubApp.certSubject names a cert in Cert:\CurrentUser\My
                               whose private key is TPM-resident, can sign, and refuses export
+                4. --mint   — OPTIONAL and the only networked check: signs a real App JWT with that
+                              key and mints a real installation token, proving GitHub accepts this
+                              machine as the App. Reports length only, never the token.
 
               Exit 1 if any configured check fails, so it can gate a provisioning runbook.
 
