@@ -4,6 +4,14 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.10] — 2026-07-29
+
+Fail clean, not modal. First shipped piece of the GitHub-App credential source (`docs/CREDENTIAL-SOURCE.md` Phase C) — deliberately landed ahead of Phases A/B because it is standalone hardening and fixes a live annoyance.
+
+### Fixed
+
+- **A credential failure opened a blocking dialog instead of reporting itself.** gscript always supplies its own credential in the push URL, so a credential prompt can only ever mean the token was rejected or (once Phase B lands) the mint failed — but Git Credential Manager's GUI prompt hangs the terminal, turning a one-line diagnosis into a stuck session with no error text. Every invocation through `GitCommand.Run` now sets `GIT_TERMINAL_PROMPT=0` on the child environment and prepends `-c credential.interactive=false -c credential.guiPrompt=false` ahead of the git subcommand (config overrides must precede it). Belt and suspenders on purpose: the env var covers a helper that ignores the config, and the child-only scope leaves the operator's own shell untouched. Single chokepoint — fetch, push, and both plain-git fallbacks inherit it.
+
 ## [2.0.0-alpha.9] — 2026-07-15
 
 The `gscript im` command family — the IM index/linter ("imindex") planned in the hub's tooling canon. First lint target: the operator hub `CLAUDE.md` itself.
