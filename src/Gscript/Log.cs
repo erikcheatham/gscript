@@ -18,6 +18,11 @@ public static class Log
     public static void DarkGray(string msg) => Write(msg, ConsoleColor.DarkGray);
     public static void DarkCyan(string msg) => Write(msg, ConsoleColor.DarkCyan);
 
+    /// <summary>Pink. Reserved for "this is where YOUR stack starts" — the rows a human still
+    /// has to act on. Deliberately the loudest colour in the palette and used for exactly one
+    /// meaning, because a colour that means several things means nothing at a glance.</summary>
+    public static void Magenta(string msg) => Write(msg, ConsoleColor.Magenta);
+
     private static void Write(string msg, ConsoleColor color)
     {
         lock (Gate)

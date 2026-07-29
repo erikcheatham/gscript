@@ -214,7 +214,10 @@ public static class TaskCommands
             case "failed": Log.Red(line); break;
             case "rejected": Log.DarkGray(line); break;
             case "approved" or "executing": Log.Yellow(line); break;
-            default: Log.Cyan(line); break; // proposed
+            // PINK = awaiting a human. In a list where most rows are already shipped, the
+            // operator's question is never "what happened" but "where do I pick up" — so the
+            // untouched rows get the loud colour and the finished ones stay quiet.
+            default: Log.Magenta(line); break; // pending / proposed
         }
     }
 
