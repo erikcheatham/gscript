@@ -89,6 +89,25 @@ Real vaults are appropriate when you have multiple parties needing access, audit
 
 The localmd convention is sized for: ONE operator, ONE primary machine (occasionally synced to others manually), small set of credentials, manual rotation cadence. When any of those assumptions breaks, graduate to a vault. Until then, localmd is the right scope.
 
+## 2026-07-28 — the agent-session axis
+
+The scope statement above ("ONE operator, ONE primary machine … when any of those
+assumptions breaks, graduate to a vault") has had an assumption break that isn't on
+its list: **the file is now inside an AI coding session's blast radius.** The localmd
+root is mounted into agent sessions, and on 2026-07-28 three PAT exposures in one
+evening proved the point — the third required no operator mistake at all: the
+rotation edit itself echoed the file's contents into the session transcript.
+
+The new axis is orthogonal to everything weighed above — not convenience, not
+rotation-staleness, but: *is the plaintext at rest inside something that reads and
+echoes files by design?* The rule that follows: **any file an agent session can read
+is a file an agent session can disclose, whether or not it reads it deliberately.**
+
+Resolution (design brief: `CREDENTIAL-SOURCE.md`): keep localmd as the default behind
+an `ICredentialSource` seam, add a credman/DPAPI source read at run time, and reduce
+`githubPAT.md` to metadata-only. The DPAPI objection above does not bind this case —
+gscript runs interactively as the operator, the exact context where DPAPI works.
+
 ## Multi-machine sync
 
 If you operate from multiple machines, you need a sync strategy. Options ranked by ceremony:
