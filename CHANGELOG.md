@@ -4,6 +4,29 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.13] — 2026-07-31
+
+One change, prompted by a day gscript spent telling the truth and creating a false impression.
+
+### Added
+
+- **`ciSecondaryWorkflowFile`** (+ `ciSecondaryMaxSeconds`, default 240) — a SECOND workflow whose verdict is **reported, never gated**. Null disables it, so existing configs are unaffected.
+
+### Why
+
+A repo's test workflow was deliberately marked non-gating. gscript watched only `ciWorkflowFile`. So `CI GREEN` printed on every push for a full day while the unit suite had not compiled since that morning — 570 tests that nobody ran, four sandbox suites cited as passing that had never executed, and three defects that shipped behind the impression, including one that took every agent page on the platform down.
+
+Every line gscript printed was accurate. "CI GREEN" was a true statement about the deploy workflow. The problem is that a tool which says green is a tool you stop double-checking, so the accurate statement did the work of a false one.
+
+Non-gating is a legitimate choice for a suite that is slow, flaky or still stabilising. **Invisible is not** — a suite whose result nobody is ever shown is indistinguishable from no suite. The fix is therefore visibility rather than gating: print the verdict, change nothing else.
+
+### Shape
+
+- Reported **before** the primary verdict is allowed to throw, so a failing deploy cannot swallow the test result. Those two runs are most worth seeing together, and the one day they diverged, the divergence was the entire story.
+- A red secondary prints loudly and says so in words — *"push SUCCEEDED and this did not block it — but the suite is red"* — because the failure mode being fixed is someone reading the green above it as "tests passed".
+- Bounded: if the run has not finished within `ciSecondaryMaxSeconds` it prints "still running" with the URL and moves on. Making the push ceremony slower would trade one bad habit for another.
+- Never throws. A reporting nicety must not break a push that already landed.
+
 ## [2.0.0-alpha.12] — 2026-07-29
 
 Phase B of the GitHub-App credential source: `credentialSource: ["githubapp"]` now works end to end. The standing secret stops being a pushable token in a readable file and becomes a TPM-sealed key whose only job is signing a ≤10-minute assertion.

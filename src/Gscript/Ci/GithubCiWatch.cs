@@ -165,6 +165,95 @@ public static class GithubCiWatch
         return new CiWatchResult(false, runId, actionsUrl, "timeout");
     }
 
+    /// <summary>
+    /// Report a SECOND workflow's verdict for the same commit — printed, never gated, never throws.
+    ///
+    /// <para>WHY THIS EXISTS. On 2026-07-30 a repo's test workflow was marked non-gating on
+    /// purpose, gscript watched only the deploy workflow, and the push tool therefore printed
+    /// "CI GREEN" all day while the unit suite had not compiled since that morning. The statement
+    /// was true about the deploy and false about the tests, and nobody checked, because a tool
+    /// that says green is a tool you stop double-checking. Three defects shipped behind it.</para>
+    ///
+    /// <para>Non-gating is a legitimate choice for a slow or stabilising suite. Invisible is not:
+    /// a suite whose result nobody is ever shown is the same as no suite. So this prints a verdict
+    /// and nothing more — no exception, no exit code, no influence on the push.</para>
+    ///
+    /// <para>Bounded on purpose. If the run has not finished within <paramref name="maxWaitSeconds"/>
+    /// it prints "still running" with the URL and returns. Making the ceremony slower would trade
+    /// one bad habit for another.</para>
+    /// </summary>
+    public static void ReportSecondary(
+        string repoOwner, string repoName, string workflowFile, string commitSha, string pat,
+        int maxWaitSeconds = 240, int pollSeconds = 15, int skipDetectSeconds = 60)
+    {
+        string apiBase = $"https://api.github.com/repos/{repoOwner}/{repoName}";
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {pat}");
+            client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+            client.DefaultRequestHeaders.Add("User-Agent", "gscript");
+
+            var start = DateTime.UtcNow;
+            bool runSeen = false;
+            string htmlUrl = $"https://github.com/{repoOwner}/{repoName}/actions";
+
+            Log.Cyan($"  [{Now()}] {workflowFile} (reported, not gating):");
+
+            while ((DateTime.UtcNow - start).TotalSeconds < maxWaitSeconds)
+            {
+                string status = "", conclusion = "";
+
+                using (var doc = GetJson(client,
+                    $"{apiBase}/actions/workflows/{workflowFile}/runs?head_sha={commitSha}&per_page=1"))
+                {
+                    var root = doc.RootElement;
+                    int total = root.TryGetProperty("total_count", out var tc) ? tc.GetInt32() : 0;
+                    if (total > 0 && root.TryGetProperty("workflow_runs", out var runs) && runs.GetArrayLength() > 0)
+                    {
+                        runSeen = true;
+                        var run = runs[0];
+                        status = Str(run, "status");
+                        conclusion = Str(run, "conclusion");
+                        var url = Str(run, "html_url");
+                        if (!string.IsNullOrEmpty(url)) htmlUrl = url;
+                    }
+                }
+
+                if (!runSeen && (DateTime.UtcNow - start).TotalSeconds >= skipDetectSeconds)
+                {
+                    Log.DarkGray($"    no run for {workflowFile} — skipped (paths-ignore / no trigger).");
+                    return;
+                }
+
+                if (status == "completed")
+                {
+                    if (conclusion == "success") Log.Green($"    PASSED: {htmlUrl}");
+                    else
+                    {
+                        // Deliberately loud despite being non-gating. The push still succeeds;
+                        // the point is that the operator cannot later say nobody told them.
+                        Log.Red($"    {conclusion.ToUpperInvariant()}: {htmlUrl}");
+                        Log.Yellow("    ^ push SUCCEEDED and this did not block it — but the suite is red. "
+                                   + "Do not read the green above as 'tests passed'.");
+                    }
+                    return;
+                }
+
+                Thread.Sleep(TimeSpan.FromSeconds(pollSeconds));
+            }
+
+            Log.Yellow($"    still running after {maxWaitSeconds}s — verdict unknown: {htmlUrl}");
+        }
+        catch (Exception ex)
+        {
+            // Never let a reporting nicety break a push that already landed.
+            Log.DarkGray($"    could not read {workflowFile} ({ex.Message}) — check the Actions tab.");
+        }
+    }
+
     private static JsonDocument GetJson(HttpClient client, string url)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);

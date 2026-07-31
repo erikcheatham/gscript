@@ -15,6 +15,27 @@ public sealed class GscriptConfig
     public string? RepoOwner { get; set; }
     public string? RepoName { get; set; }
     public string CiWorkflowFile { get; set; } = "deploy.yml";
+
+    /// <summary>
+    /// A SECOND workflow to report on after the push — reported, never gated. Null disables it.
+    ///
+    /// <para>Exists because of a specific and expensive failure on 2026-07-30: a repo's test
+    /// workflow was deliberately non-gating, gscript watched only <see cref="CiWorkflowFile"/>,
+    /// and so "CI GREEN" was printed all day while the unit suite had not compiled since morning.
+    /// Every claim that the tests passed was false and nothing contradicted it, because nobody is
+    /// going to open the Actions tab when the tool just said green. Three defects shipped behind
+    /// that impression.</para>
+    ///
+    /// <para>The fix is visibility rather than gating: a non-gating suite is a deliberate choice
+    /// (slow, flaky, or still stabilising), but a suite whose result is never SHOWN is the same as
+    /// no suite. Its verdict never changes the exit code.</para>
+    /// </summary>
+    public string? CiSecondaryWorkflowFile { get; set; }
+
+    /// <summary>How long to wait for the secondary workflow before printing "still running" and
+    /// moving on. Short by design: this must never become the reason a push feels slow.</summary>
+    public int CiSecondaryMaxSeconds { get; set; } = 240;
+
     public bool WatchCi { get; set; } = true;
     public int CiWatchMaxMinutes { get; set; } = 15;
     public int CiWatchPollSeconds { get; set; } = 20;

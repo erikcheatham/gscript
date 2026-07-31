@@ -155,6 +155,18 @@ public static partial class GscriptRunner
         {
             ci = GithubCiWatch.Watch(cfg.RepoOwner!, cfg.RepoName!, cfg.CiWorkflowFile, commitSha, pat,
                 cfg.CiWatchMaxMinutes, cfg.CiWatchPollSeconds);
+
+            // Secondary workflow verdict — printed BEFORE the primary verdict is allowed to throw,
+            // deliberately. A failing deploy must not swallow the test result: those are the two
+            // runs most worth seeing together, and the one time they diverged (2026-07-30) the
+            // divergence was the whole story.
+            if (!string.IsNullOrWhiteSpace(cfg.CiSecondaryWorkflowFile))
+            {
+                GithubCiWatch.ReportSecondary(
+                    cfg.RepoOwner!, cfg.RepoName!, cfg.CiSecondaryWorkflowFile!, commitSha, pat,
+                    cfg.CiSecondaryMaxSeconds);
+            }
+
             if (!ci.Success)
                 throw new GscriptException($"CI did not complete successfully (conclusion={ci.Conclusion})");
 
