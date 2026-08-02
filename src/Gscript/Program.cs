@@ -17,7 +17,7 @@ internal static class Cli
 {
     // Keep in lockstep with Gscript.csproj <Version> (alpha.13 shipped with this const lagging —
     // caught at the alpha.14 bump; the lint for this is on the backlog).
-    private const string Version = "gscript 2.0.0-alpha.15";
+    private const string Version = "gscript 2.0.0-alpha.16";
 
     public static int Run(string[] args)
     {
@@ -41,6 +41,12 @@ internal static class Cli
                     var cfg = BuildConfig(args[1..]);
                     return PullRunner.Run(cfg) ? 0 : 1;
                 }
+                case "release":
+                {
+                    if (args[1..].Any(a => a is "-h" or "--help")) { PrintUsage(); return 0; }
+                    var cfg = BuildConfig(args[1..]);
+                    return ReleaseRunner.Run(cfg) ? 0 : 1;
+                }
                 case "task":
                     return TaskCommands.Run(args[1..]);
                 case "im":
@@ -62,7 +68,8 @@ internal static class Cli
     private static GscriptConfig BuildConfig(string[] args)
     {
         string? configPath = null, files = null, message = null, repoOwner = null,
-                repoName = null, workflow = null, workingDir = null, localmd = null, logFile = null;
+                repoName = null, workflow = null, workingDir = null, localmd = null, logFile = null,
+                tag = null;
         bool noDeploy = false, noWatch = false, dryRun = false, noSync = false, requireClean = false;
         int? maxShrinkPct = null;
         var allowShrink = new List<string>();
@@ -79,6 +86,7 @@ internal static class Cli
                 case "--workflow": workflow = Next(args, ref i); break;
                 case "--working-dir": workingDir = Next(args, ref i); break;
                 case "--localmd": localmd = Next(args, ref i); break;
+                case "--tag": tag = Next(args, ref i); break;
                 case "--log": logFile = Next(args, ref i); break;
                 case "--no-deploy": noDeploy = true; break;
                 case "--no-watch": noWatch = true; break;
@@ -109,6 +117,7 @@ internal static class Cli
         if (workingDir is not null) cfg.WorkingDirectory = workingDir;
         if (localmd is not null) cfg.LocalmdPath = localmd;
         if (logFile is not null) cfg.LogFile = logFile;
+        if (tag is not null) cfg.ReleaseTag = tag;
         cfg.LocalmdPath ??= cfg.PatFile;   // patFile json field is an alias; --localmd + localmdPath win over it
         if (noDeploy) cfg.NoDeploy = true;
         if (noWatch) cfg.WatchCi = false;
@@ -134,6 +143,7 @@ internal static class Cli
         Console.WriteLine("USAGE:");
         Console.WriteLine("  gscript push [options]");
         Console.WriteLine("  gscript pull [options]                             (fetch + ff-only; credential resolved at run time — no env vars, no prompts)");
+        Console.WriteLine("  gscript release [--tag vX.Y.Z]                     (lockstep-checked tag + tag-push + publish-workflow report)");
         Console.WriteLine("  gscript task <post|list|show|approve|reject|run>   (the comms task-bus)");
         Console.WriteLine("  gscript im <lint|digest>                           (the IM index/linter)");
         Console.WriteLine("  gscript cred test                                  (credential source read-back / TPM seal check)");

@@ -74,6 +74,12 @@ public sealed class GscriptConfig
     public GitHubAppConfig GitHubApp { get; set; } = new();
 
     // ── concurrent-work / runner-tree hygiene (2.0.0-alpha.6) ─────
+    // ── Release (gscript release, alpha.16) ─────────────────────────────
+    public string? ReleaseProjectFile { get; set; }              // csproj whose <Version> names the tag (v<Version>); --tag overrides
+    public List<string> ReleaseLockstepFiles { get; set; } = new(); // files that must CONTAIN the version string verbatim (the drift lint, as code)
+    public string ReleaseWorkflowFile { get; set; } = "publish.yml"; // tag-triggered workflow to report (bounded, never gated)
+    public string? ReleaseTag { get; set; }                      // CLI --tag vX.Y.Z
+
     public bool NoSync { get; set; }       // CLI --no-sync: disable the pre-push auto-fast-forward when origin advanced DISJOINTLY from FilesToStage. Default false = auto-FF on.
     public bool RequireClean { get; set; } // CLI --require-clean: fail (not just warn) when files OUTSIDE FilesToStage are modified/untracked — the runner-shared-checkout hygiene gate.
 

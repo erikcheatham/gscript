@@ -4,6 +4,8 @@
   "repoName": "gscript",
   "repoVisibility": "public",
   "watchCi": false,
+  "releaseProjectFile": "src/Gscript/Gscript.csproj",
+  "releaseLockstepFiles": ["src/Gscript/Program.cs", "CHANGELOG.md"],
   "commitName": "erikcheatham",
   "commitEmail": "751184+erikcheatham@users.noreply.github.com",
 

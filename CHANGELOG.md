@@ -4,6 +4,21 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.16] — 2026-08-02
+
+### Added
+
+- **`gscript release`** — lockstep-checked tag + tag-push + publish-workflow report, retiring
+  the last plain-git-with-credentials operation (the release tag). The tag name comes from
+  `releaseProjectFile`'s `<Version>` (or `--tag`); every `releaseLockstepFiles` entry must
+  literally contain that version or the release refuses before tagging — the version-const
+  drift that shipped with alpha.13 is now a red refusal instead of a noted debt. Refuses when
+  local main is ahead of origin (release what is SHIPPED), refuses to move an existing tag, and
+  deletes the local tag if the push fails so a half-release leaves nothing behind. Ends with the
+  bounded, never-gated publish-workflow report (same contract as the secondary CI report, mode
+  classification included). With push, pull, and release under the ceremony, no git operation in
+  the working set touches a shell credential again.
+
 ## [2.0.0-alpha.15] — 2026-08-02
 
 ### Changed
