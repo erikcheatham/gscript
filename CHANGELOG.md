@@ -4,6 +4,22 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.15] — 2026-08-02
+
+### Changed
+
+- **Secondary-workflow report now names the MODE, not just the verdict.** A completed non-success
+  run is classified via its jobs: zero executed steps anywhere (or `startup_failure`) prints
+  `— BUT THE SUITE NEVER RAN`, with the explanation that this push shipped with NO test evidence;
+  a run with executed steps prints `— the suite RAN and failed`. The 07-31 defect this closes: a
+  hosted-minutes billing refusal (run created, no runner ever picked it up) printed identically to
+  a red suite, and the two demand opposite responses — one sends you to a stack trace, the other
+  to billing settings, and an unrun suite mistaken for a red one gets "fixed" by hunting a test
+  bug that does not exist. Classification is read-only and fails toward the plain red-suite
+  wording — the report never invents a mode it could not verify. This is the tool-side half of a
+  consuming repo's promote-to-gating prerequisites; the suite-side half (a meta-test that fails
+  loudly when the gate's own tests silently skip) lives with that repo.
+
 ## [2.0.0-alpha.14] — 2026-08-01
 
 ### Added

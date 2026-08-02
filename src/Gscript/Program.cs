@@ -17,7 +17,7 @@ internal static class Cli
 {
     // Keep in lockstep with Gscript.csproj <Version> (alpha.13 shipped with this const lagging —
     // caught at the alpha.14 bump; the lint for this is on the backlog).
-    private const string Version = "gscript 2.0.0-alpha.14";
+    private const string Version = "gscript 2.0.0-alpha.15";
 
     public static int Run(string[] args)
     {

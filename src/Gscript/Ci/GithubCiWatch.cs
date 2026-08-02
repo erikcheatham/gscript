@@ -205,6 +205,7 @@ public static class GithubCiWatch
             while ((DateTime.UtcNow - start).TotalSeconds < maxWaitSeconds)
             {
                 string status = "", conclusion = "";
+                long runId = 0;
 
                 using (var doc = GetJson(client,
                     $"{apiBase}/actions/workflows/{workflowFile}/runs?head_sha={commitSha}&per_page=1"))
@@ -217,6 +218,7 @@ public static class GithubCiWatch
                         var run = runs[0];
                         status = Str(run, "status");
                         conclusion = Str(run, "conclusion");
+                        if (run.TryGetProperty("id", out var idEl)) runId = idEl.GetInt64();
                         var url = Str(run, "html_url");
                         if (!string.IsNullOrEmpty(url)) htmlUrl = url;
                     }
@@ -230,12 +232,29 @@ public static class GithubCiWatch
 
                 if (status == "completed")
                 {
-                    if (conclusion == "success") Log.Green($"    PASSED: {htmlUrl}");
+                    if (conclusion == "success") { Log.Green($"    PASSED: {htmlUrl}"); return; }
+
+                    // MODE, not just verdict (alpha.15 — the 07-31 defect: a billing refusal
+                    // printed identically to a red suite, so "FAILURE" was read as "tests failed"
+                    // when the truth was "tests never executed"). A red suite and an unrun suite
+                    // demand different actions: one sends you to a stack trace, the other to
+                    // billing/runner settings — and an unrun suite mistaken for a red one gets
+                    // "fixed" by someone hunting a test bug that does not exist.
+                    bool neverRan = conclusion == "startup_failure"
+                        || (runId > 0 && RunHadNoSteps(client, apiBase, runId));
+
+                    if (neverRan)
+                    {
+                        Log.Red($"    {conclusion.ToUpperInvariant()} — BUT THE SUITE NEVER RAN: {htmlUrl}");
+                        Log.Yellow("    ^ zero steps executed (billing refusal, no runner, or workflow "
+                                   + "startup failure). This is NOT a test verdict — the tests are UNRUN, "
+                                   + "not red, and this push shipped with NO test evidence at all.");
+                    }
                     else
                     {
                         // Deliberately loud despite being non-gating. The push still succeeds;
                         // the point is that the operator cannot later say nobody told them.
-                        Log.Red($"    {conclusion.ToUpperInvariant()}: {htmlUrl}");
+                        Log.Red($"    {conclusion.ToUpperInvariant()} — the suite RAN and failed: {htmlUrl}");
                         Log.Yellow("    ^ push SUCCEEDED and this did not block it — but the suite is red. "
                                    + "Do not read the green above as 'tests passed'.");
                     }
@@ -251,6 +270,38 @@ public static class GithubCiWatch
         {
             // Never let a reporting nicety break a push that already landed.
             Log.DarkGray($"    could not read {workflowFile} ({ex.Message}) — check the Actions tab.");
+        }
+    }
+
+    /// <summary>
+    /// True when the completed run produced NO executed steps — the signature of a run that was
+    /// refused rather than failed (hosted-minutes exhaustion creates the run, then no runner ever
+    /// picks it up: jobs exist with empty step lists, or no jobs exist at all). Read-only, bounded
+    /// by the caller's try/catch; any API hiccup returns false so the report degrades to the plain
+    /// red-suite wording rather than inventing a mode.
+    /// </summary>
+    private static bool RunHadNoSteps(HttpClient client, string apiBase, long runId)
+    {
+        try
+        {
+            using var doc = GetJson(client, $"{apiBase}/actions/runs/{runId}/jobs?per_page=50");
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("jobs", out var jobs) || jobs.ValueKind != JsonValueKind.Array)
+                return false;
+            if (jobs.GetArrayLength() == 0) return true; // run created, no job ever materialized
+
+            foreach (var job in jobs.EnumerateArray())
+            {
+                if (job.TryGetProperty("steps", out var steps)
+                    && steps.ValueKind == JsonValueKind.Array
+                    && steps.GetArrayLength() > 0)
+                    return false; // at least one job actually executed steps — a REAL failure
+            }
+            return true; // jobs exist, zero steps anywhere: nothing ever ran
+        }
+        catch
+        {
+            return false;
         }
     }
 
