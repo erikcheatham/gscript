@@ -15,7 +15,9 @@ return Cli.Run(args);
 /// </summary>
 internal static class Cli
 {
-    private const string Version = "gscript 2.0.0-alpha.12";
+    // Keep in lockstep with Gscript.csproj <Version> (alpha.13 shipped with this const lagging —
+    // caught at the alpha.14 bump; the lint for this is on the backlog).
+    private const string Version = "gscript 2.0.0-alpha.14";
 
     public static int Run(string[] args)
     {
@@ -33,6 +35,12 @@ internal static class Cli
                     var cfg = BuildConfig(args[1..]);
                     return GscriptRunner.Run(cfg).Success ? 0 : 1;
                 }
+                case "pull":
+                {
+                    if (args[1..].Any(a => a is "-h" or "--help")) { PrintUsage(); return 0; }
+                    var cfg = BuildConfig(args[1..]);
+                    return PullRunner.Run(cfg) ? 0 : 1;
+                }
                 case "task":
                     return TaskCommands.Run(args[1..]);
                 case "im":
@@ -40,7 +48,7 @@ internal static class Cli
                 case "cred":
                     return CredCommands.Run(args[1..]);
                 default:
-                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript task', 'gscript im', 'gscript cred', or 'gscript --help'.");
+                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript pull', 'gscript task', 'gscript im', 'gscript cred', or 'gscript --help'.");
                     return 1;
             }
         }
@@ -125,6 +133,7 @@ internal static class Cli
         Console.WriteLine();
         Console.WriteLine("USAGE:");
         Console.WriteLine("  gscript push [options]");
+        Console.WriteLine("  gscript pull [options]                             (fetch + ff-only; credential resolved at run time — no env vars, no prompts)");
         Console.WriteLine("  gscript task <post|list|show|approve|reject|run>   (the comms task-bus)");
         Console.WriteLine("  gscript im <lint|digest>                           (the IM index/linter)");
         Console.WriteLine("  gscript cred test                                  (credential source read-back / TPM seal check)");

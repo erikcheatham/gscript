@@ -35,8 +35,10 @@ public sealed class GitHubAppSource : ICredentialSource
     private readonly string _certSubject;
     private readonly string? _repoName;
     private readonly IReadOnlyList<string> _stagedFiles;
+    private readonly bool _readOnly;
 
-    public GitHubAppSource(GitHubAppConfig app, string? repoName, IReadOnlyList<string>? stagedFiles)
+    public GitHubAppSource(GitHubAppConfig app, string? repoName, IReadOnlyList<string>? stagedFiles,
+        bool readOnly = false)
     {
         if (app.AppId <= 0)
             throw new CredentialSourceException(
@@ -53,6 +55,7 @@ public sealed class GitHubAppSource : ICredentialSource
                 + "TPM-backed private key signs the App JWT (e.g. \"CN=MyApp\").");
         _repoName = repoName;
         _stagedFiles = stagedFiles ?? Array.Empty<string>();
+        _readOnly = readOnly;
     }
 
     public string Name => "githubapp";
@@ -156,8 +159,11 @@ public sealed class GitHubAppSource : ICredentialSource
     /// </summary>
     private string BuildScopeBody()
     {
-        var permissions = new Dictionary<string, string> { ["contents"] = "write" };
-        if (NeedsWorkflowScope()) permissions["workflows"] = "write";
+        // A read-only mint (gscript pull, alpha.14) asks for contents:read and NOTHING else —
+        // the token that fetches a repo cannot write to it, mirroring how the ordinary push's
+        // token cannot rewrite a workflow. Least privilege per OPERATION, not per install.
+        var permissions = new Dictionary<string, string> { ["contents"] = _readOnly ? "read" : "write" };
+        if (!_readOnly && NeedsWorkflowScope()) permissions["workflows"] = "write";
 
         object payload = _repoName is { Length: > 0 }
             ? new { repositories = new[] { _repoName }, permissions }
@@ -174,7 +180,9 @@ public sealed class GitHubAppSource : ICredentialSource
              .StartsWith("github/workflows/", StringComparison.OrdinalIgnoreCase));
 
     private string DescribePermissions() =>
-        NeedsWorkflowScope() ? "contents:write + workflows:write" : "contents:write";
+        _readOnly ? "contents:read"
+        : NeedsWorkflowScope() ? "contents:write + workflows:write"
+        : "contents:write";
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";

@@ -21,7 +21,15 @@ public static class CredentialResolver
 
     /// <summary>Build the ordered source list. Unknown names fail fast — a typo in
     /// <c>credentialSource</c> must not silently degrade to the default.</summary>
-    public static IReadOnlyList<ICredentialSource> Build(GscriptConfig cfg)
+    public static IReadOnlyList<ICredentialSource> Build(GscriptConfig cfg) => Build(cfg, readOnly: false);
+
+    /// <summary>
+    /// Build the ordered source list, optionally in READ-ONLY mode (gscript pull): the githubapp
+    /// source then mints <c>contents:read</c> instead of <c>contents:write</c>. localmd is
+    /// unaffected — a PAT's scope is fixed at creation, which is exactly the property the App
+    /// path exists to improve on.
+    /// </summary>
+    public static IReadOnlyList<ICredentialSource> Build(GscriptConfig cfg, bool readOnly)
     {
         var names = (cfg.CredentialSource is { Count: > 0 })
             ? cfg.CredentialSource
@@ -45,7 +53,7 @@ public static class CredentialResolver
                         throw new CredentialSourceException(
                             "credentialSource 'githubapp' needs Windows (the TPM is reached via the "
                             + "platform crypto provider). Keep 'localmd' in credentialSource on this host.");
-                    sources.Add(new GitHubAppSource(cfg.GitHubApp, cfg.RepoName, cfg.FilesToStage));
+                    sources.Add(new GitHubAppSource(cfg.GitHubApp, cfg.RepoName, cfg.FilesToStage, readOnly));
                     break;
 
                 default:
@@ -61,9 +69,18 @@ public static class CredentialResolver
     /// <see cref="CredentialSourceException"/> naming every source tried when none yields one, so
     /// the failure says which mechanisms were attempted rather than just "no PAT found".
     /// </summary>
-    public static string ResolvePushToken(GscriptConfig cfg)
+    public static string ResolvePushToken(GscriptConfig cfg) => Resolve(cfg, readOnly: false, verb: "push");
+
+    /// <summary>
+    /// Resolve a PULL credential: same ordered sources, but a githubapp mint is scoped
+    /// <c>contents:read</c> — the token that fetches cannot write. Same no-silent-fallback
+    /// contract as <see cref="ResolvePushToken"/>.
+    /// </summary>
+    public static string ResolvePullToken(GscriptConfig cfg) => Resolve(cfg, readOnly: true, verb: "pull");
+
+    private static string Resolve(GscriptConfig cfg, bool readOnly, string verb)
     {
-        var sources = Build(cfg);
+        var sources = Build(cfg, readOnly);
         var failures = new List<string>();
 
         foreach (var source in sources)
@@ -85,7 +102,7 @@ public static class CredentialResolver
         }
 
         throw new CredentialSourceException(
-            "no credential source produced a push token. Tried -> "
+            $"no credential source produced a {verb} token. Tried -> "
             + string.Join(" | ", failures));
     }
 }

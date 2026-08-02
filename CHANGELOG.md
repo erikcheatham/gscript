@@ -4,6 +4,37 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.14] — 2026-08-01
+
+### Added
+
+- **`gscript pull`** — fetch + fast-forward through the ceremony, so no repo under C:\work ever
+  needs plain git with credentials again. The credential resolves at run time through the same
+  ordered `credentialSource` list as push (localmd PAT today; a TPM-minted installation token
+  wherever a config opts into `githubapp`), which means: no `$env:` variable to set per session,
+  no Git Credential Manager dialog ever (non-interactive is pinned on every child git), stale
+  locks cleared before the first git op, and the tracking ref refreshed after integrating (the
+  stale-`origin/main` trap, mechanized away). Fast-forward ONLY: unpushed local commits make the
+  pull refuse — integrating over local work is the push ceremony's decision. `--dry-run` reports
+  ahead/behind and stops.
+- **Read-scoped App mints** — `CredentialResolver.ResolvePullToken` / `GitHubAppSource(readOnly:)`:
+  a pull's installation token is `contents:read` and nothing else. The token that fetches cannot
+  write, the way an ordinary push's token cannot rewrite a workflow.
+
+### Fixed
+
+- `Cli.Version` const had lagged at alpha.12 while csproj/CHANGELOG said alpha.13 — now in
+  lockstep (a lint for this belongs in the backlog).
+
+### Why
+
+The operator's evening ended with a GCM credential dialog over a routine pull, on a machine whose
+TPM can mint a scoped token in under a second. Session env vars and vaulted PATs were both
+considered and both are the wrong shape: an env var is a per-session ceremony that parks a secret
+in process memory, and a vaulted PAT is still a standing secret *somewhere*. The right shape
+already existed in this tool — resolve at run time, mint least-privilege, embed in one URL, never
+log it. Pull just had to ride it.
+
 ## [2.0.0-alpha.13] — 2026-07-31
 
 One change, prompted by a day gscript spent telling the truth and creating a false impression.
