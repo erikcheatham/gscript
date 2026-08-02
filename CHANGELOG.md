@@ -4,6 +4,21 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.19] — 2026-08-02
+
+### Added
+
+- **`allow_shrink` on the task-bus target** — plus `task post --allow-shrink <relpath>`
+  (repeatable) and a `shrink:` line in `task show`. The shrink gate could only ever be
+  waived from the CLI, so any sweep whose *purpose* is removal was unshippable through the
+  bus: the seat authors the deletion, the bus carries it, and there is no shell in that
+  path to pass a flag to. A refactor that cut six files by 14% died on the gate with no
+  way to say "yes, intended" from inside the record. The exemption now travels with the
+  task, where the intent was recorded in the first place. A single `"*"` entry exempts
+  every file the task names — for sweeps where listing them would just be the `files`
+  array typed twice. Paths are normalized the way the gate keys its lookup, so either
+  slash form works (see alpha.18 for why that sentence has to be written down).
+
 ## [2.0.0-alpha.18] — 2026-08-02
 
 ### Fixed

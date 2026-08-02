@@ -29,6 +29,13 @@ public sealed class TaskTarget
     public List<string> Files { get; set; } = new();
     public string? Message { get; set; }
     public bool NoDeploy { get; set; }
+
+    /// <summary>Per-file shrink-gate exemptions, same semantic as the CLI's repeatable
+    /// <c>--allow-shrink</c>. Paths are relpaths in either slash form; <c>task run</c>
+    /// normalizes them the way the gate does. A single <c>"*"</c> entry exempts every
+    /// file in this task — for sweeps whose whole purpose is removal, where naming each
+    /// file would just be the <c>files</c> list typed twice.</summary>
+    public List<string> AllowShrink { get; set; } = new();
 }
 
 public sealed class TaskResult

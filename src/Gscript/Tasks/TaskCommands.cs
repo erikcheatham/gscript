@@ -36,6 +36,7 @@ public static class TaskCommands
                 repoName = null, workingDir = null, files = null, message = null,
                 url = null, token = null;
         bool noDeploy = false;
+        var allowShrink = new List<string>();
 
         for (int i = 0; i < args.Length; i++)
             switch (args[i])
@@ -50,6 +51,7 @@ public static class TaskCommands
                 case "--files": files = Next(args, ref i); break;
                 case "--message" or "-m": message = Next(args, ref i); break;
                 case "--no-deploy": noDeploy = true; break;
+                case "--allow-shrink": allowShrink.Add(Next(args, ref i)); break;
                 case "--comms-url": url = Next(args, ref i); break;
                 case "--comms-token": token = Next(args, ref i); break;
                 default: throw new GscriptException($"task post: unknown option '{args[i]}'");
@@ -67,6 +69,7 @@ public static class TaskCommands
             Files = (files ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
             Message = message,
             NoDeploy = noDeploy,
+            AllowShrink = allowShrink,
         };
 
         var bus = TaskBus.Resolve(url, token);
@@ -112,6 +115,8 @@ public static class TaskCommands
         {
             Log.Plain($"  target:   {tg.RepoOwner}/{tg.RepoName} @ {tg.WorkingDir}{(tg.NoDeploy ? "  [no-deploy]" : "")}");
             Log.Plain($"  files:    {string.Join(", ", tg.Files)}");
+            if (tg.AllowShrink is { Count: > 0 })
+                Log.Plain($"  shrink:   allowed on {(tg.AllowShrink.Contains("*") ? "ALL files in this task" : string.Join(", ", tg.AllowShrink))}");
             if (!string.IsNullOrEmpty(tg.Message)) Log.Plain($"  message:  {tg.Message.Split('\n')[0]}");
         }
         if (t.Result is { } r) Log.Plain($"  result:   sha={r.Sha}  ci={r.CiStatus}  {r.Detail}");
@@ -177,6 +182,15 @@ public static class TaskCommands
         if (t.Files is { Count: > 0 }) cfg.FilesToStage = t.Files;
         if (!string.IsNullOrEmpty(t.Message)) cfg.CommitMessage = t.Message;
         if (t.NoDeploy) cfg.NoDeploy = true;
+        // Shrink exemptions travel WITH the task, not with the operator's shell: a sweep
+        // whose whole point is removal would otherwise be unshippable through the bus,
+        // because there is no CLI to pass --allow-shrink to. "*" exempts every file the
+        // task names. Normalized the way the gate keys its lookup (forward slashes).
+        if (t.AllowShrink is { Count: > 0 })
+        {
+            var targets = t.AllowShrink.Contains("*") ? cfg.FilesToStage : t.AllowShrink;
+            foreach (var p in targets) cfg.ShrinkageOverrides[p.Replace('\\', '/')] = 100;
+        }
         if (!string.IsNullOrEmpty(t.RepoOwner)) cfg.RepoOwner = t.RepoOwner;
         if (!string.IsNullOrEmpty(t.RepoName)) cfg.RepoName = t.RepoName;
 
@@ -258,6 +272,7 @@ public static class TaskCommands
         Console.WriteLine();
         Console.WriteLine("  gscript task post    --to <slug> --subject <s> --working-dir <d> --files <a,b> --message <m>");
         Console.WriteLine("                       [--no-deploy] [--from <slug>] [--repo-owner <o>] [--repo-name <r>]");
+        Console.WriteLine("                       [--allow-shrink <relpath>|* ...]  (repeatable; '*' = every file this task names)");
         Console.WriteLine("  gscript task list    [--status <s>] [--created-by <slug>] [--for <slug>]");
         Console.WriteLine("  gscript task show    <task_id>");
         Console.WriteLine("  gscript task approve <task_id> [--by <slug>]");
