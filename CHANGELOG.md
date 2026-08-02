@@ -4,6 +4,38 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.17] — 2026-08-02
+
+### Added
+
+- **Machine-level config + `gscript config`** — `%APPDATA%\gscript\config.json` (POSIX:
+  `~/.config/gscript/config.json`) holding the one fact that is true of a MACHINE rather than any
+  repo: `localmdPath`, where the operator's private localmd actually lives. Written once per
+  machine by `gscript config set localmdPath <path>` (refuses a path that doesn't exist);
+  `gscript config show` prints the file, the value, and what actually resolves from it — the
+  localmd default and the task directory — so a wrong setup is visible before it bites.
+  `Localmd.DefaultPath()` consults it first, which repairs every downstream default in one seam:
+  push/pull credentials, leak patterns, `cred`, `im`, and the task bus.
+
+### Fixed
+
+- **`gscript task list` was CWD-dependent.** The task directory's repo-config step reads
+  `./gscript.json` from the current directory, so the same command answered differently from a
+  repo root and from anywhere else: an operator whose private folder had been relocated, standing
+  outside a repo, fell through to the stale profile-relative default and got `(no tasks)` over a
+  bus holding seventy records. The resolution-order doc even named this exact failure class and
+  then committed it in its own fallback. Machine config closes it: resolution is now explicit
+  flag/env → repo `gscript.json` → machine config → profile default, correct from any directory.
+
+### Why
+
+The tool's defaults are compiled into a public tree, so they can only ever be profile-relative
+guesses; the facts they guess at are per-machine and private. Repo config was the wrong home for
+a machine fact — it travels with a directory, not a machine, and evaporates the moment you
+`cd ..`. An env var is a per-session ceremony (the alpha.14 doctrine). A machine fact belongs in
+a machine file: the public tree holds the mechanism, the machine holds the value, and a stranger's
+fresh clone behaves exactly as before.
+
 ## [2.0.0-alpha.16] — 2026-08-02
 
 ### Added

@@ -29,15 +29,15 @@ public static class TaskBus
 
     /// <summary>
     /// Resolution order: <c>GSCRIPT_TASKS_DIR</c> → a <c>tasks/</c> folder beside the localmd named
-    /// by the repo's own <c>gscript.json</c> → beside <see cref="Localmd.DefaultPath"/>.
+    /// by the repo's own <c>gscript.json</c> → beside <see cref="Localmd.DefaultPath"/> (which, as
+    /// of alpha.17, consults the MACHINE config first — see <see cref="MachineConfig"/>).
     ///
-    /// <para>The gscript.json step matters and is not merely a convenience.
-    /// <see cref="Localmd.DefaultPath"/> is <c>%USERPROFILE%\private\local.md</c>, but an operator
-    /// whose working trees have been relocated keeps localmd somewhere else entirely and records
-    /// that in <c>localmdPath</c>. Falling straight through to the profile-relative default would
-    /// silently create a task directory in a path nothing else uses — a stale-path bug of exactly
-    /// the kind <c>gscript im lint</c> scans for. Reading the config the repo already maintains
-    /// makes the default correct with no env var to set.</para>
+    /// <para>The gscript.json step is a per-repo override, but it reads from the CURRENT DIRECTORY —
+    /// which made the task bus CWD-dependent: the same <c>task list</c> answered differently from a
+    /// repo root and from anywhere else, and a relocated operator standing outside a repo got an
+    /// empty list from a stale profile-relative path (the alpha.17 bug). The machine config closes
+    /// that: one <c>gscript config set localmdPath</c> per machine and the fallback is correct from
+    /// ANY directory, with no env var and no operator path in this public tree.</para>
     ///
     /// <para>Wherever it lands, the folder is the operator's private, already-synced repo: tasks
     /// replicate between writer seats for free and never enter a public tree.</para>

@@ -32,9 +32,23 @@ public static partial class Localmd
 
     private static IReadOnlyList<LeakPattern>? _leakCache;
 
-    /// <summary>Default localmd path: <c>%USERPROFILE%\private\local.md</c> (Windows) or <c>$HOME/private/local.md</c> (POSIX).</summary>
+    /// <summary>
+    /// Default localmd path. Consults the MACHINE config first (alpha.17 —
+    /// <see cref="MachineConfig"/>: an operator whose private folder was relocated records the
+    /// real path once per machine via <c>gscript config set localmdPath</c>, and every verb in
+    /// every directory resolves it, CWD-independent). Without a machine config:
+    /// <c>%USERPROFILE%\private\local.md</c> (Windows) or <c>$HOME/private/local.md</c> (POSIX).
+    /// Always returns a FILE path — a configured directory gets <c>local.md</c> appended, so
+    /// callers that take <c>Path.GetDirectoryName</c> of the result (the task bus) stay correct.
+    /// </summary>
     public static string DefaultPath()
     {
+        var configured = MachineConfig.TryLoad()?.LocalmdPath;
+        if (!string.IsNullOrWhiteSpace(configured))
+            return Directory.Exists(configured)
+                ? Path.Combine(configured, "local.md")
+                : configured!;
+
         var userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
         if (!string.IsNullOrEmpty(userProfile))
             return Path.Combine(userProfile, "private", "local.md");

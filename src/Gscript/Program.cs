@@ -17,7 +17,7 @@ internal static class Cli
 {
     // Keep in lockstep with Gscript.csproj <Version> (alpha.13 shipped with this const lagging —
     // caught at the alpha.14 bump; the lint for this is on the backlog).
-    private const string Version = "gscript 2.0.0-alpha.16";
+    private const string Version = "gscript 2.0.0-alpha.17";
 
     public static int Run(string[] args)
     {
@@ -53,8 +53,10 @@ internal static class Cli
                     return ImCommands.Run(args[1..]);
                 case "cred":
                     return CredCommands.Run(args[1..]);
+                case "config":
+                    return ConfigCommands.Run(args[1..]);
                 default:
-                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript pull', 'gscript task', 'gscript im', 'gscript cred', or 'gscript --help'.");
+                    Log.Red($"gscript: unknown command '{args[0]}'. Try 'gscript push', 'gscript pull', 'gscript task', 'gscript im', 'gscript cred', 'gscript config', or 'gscript --help'.");
                     return 1;
             }
         }
@@ -147,6 +149,7 @@ internal static class Cli
         Console.WriteLine("  gscript task <post|list|show|approve|reject|run>   (the comms task-bus)");
         Console.WriteLine("  gscript im <lint|digest>                           (the IM index/linter)");
         Console.WriteLine("  gscript cred test                                  (credential source read-back / TPM seal check)");
+        Console.WriteLine("  gscript config <show|set localmdPath <path>>       (machine-level config: where localmd lives on THIS machine — fixes CWD-dependent defaults)");
         Console.WriteLine();
         Console.WriteLine("OPTIONS:");
         Console.WriteLine("  --files <a,b,c>      comma-separated paths to stage (explicit; never `git add .`)");
@@ -163,7 +166,7 @@ internal static class Cli
         Console.WriteLine("  --repo-name <r>      override repo name");
         Console.WriteLine("  --workflow <f>       CI workflow filename (default: deploy.yml)");
         Console.WriteLine("  --working-dir <d>    repo root (default: current directory)");
-        Console.WriteLine("  --localmd <path>     localmd/PAT path (default: %USERPROFILE%\\private\\local.md; or gscript.json localmdPath/patFile)");
+        Console.WriteLine("  --localmd <path>     localmd/PAT path (default: machine config 'gscript config show', else %USERPROFILE%\\private\\local.md; or gscript.json localmdPath/patFile)");
         Console.WriteLine("  --log <path>         append a markdown push-log entry per successful push (or gscript.json logFile)");
         Console.WriteLine("  -h, --help           this help");
         Console.WriteLine("  -v, --version        version");
