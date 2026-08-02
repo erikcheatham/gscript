@@ -1,160 +1,122 @@
 # gscript
 
-> AI-authored git push wrappers that self-heal, fail-loud, and walk the operator through every sprint-completion ceremony in one command.
+> The push ceremony as a tool: a self-healing, fail-loud git push/pull/release CLI with content gates, run-time credentials, CI watching, and a file-backed task bus — built for repos where an AI session authors the commits and an operator approves the ships.
 
-`gscript` is a single-file shell script (PowerShell on Windows, bash on Linux/macOS) that wraps `git push` with the defensive plumbing every AI-pair-programming session keeps needing: localmd-resolved auth, trailing-null preflight, stale-lock auto-recovery, retry-with-backoff against transient lock collisions, post-push CI watch with per-step granularity, post-deploy probes. Then it self-deletes.
+`gscript` is a cross-platform .NET global tool (`dotnet tool install -g gscrpt`) that wraps every git operation a dev-ops ceremony needs: explicit-file staging (never `git add .`), content-shape preflight gates, leak checking on public trees, stale-lock auto-recovery, divergence guards, PAT-or-App-token auth resolved fresh at run time (no env vars, no credential-manager dialogs, ever), per-step CI watching, post-deploy probes, and a task bus so an agent can propose a push and a human can approve and run it.
 
-It exists because the alternative is "git push, then alt-tab to GitHub, then wait, then alt-tab to staging, then curl, then update an IM file by hand, then realize the PAT expired, then..." and we'd rather have one command.
+It exists because the alternative is "git push, then alt-tab to GitHub, then wait, then curl staging, then realize the PAT expired, then discover the file the sandbox wrote was full of trailing NULs" — and we'd rather have one command that refuses loudly before any of that ships.
 
-## Quickstart
+## Install
 
-1. **One-time setup** — see [docs/PAT-SETUP.md](docs/PAT-SETUP.md) for the GitHub PAT scoping (Contents R/W + Actions: Read + Workflows: R/W) and [docs/LOCALMD.md](docs/LOCALMD.md) for the localmd convention.
-
-2. **Pick a mode:**
-
-   **Module mode (PowerShell, recommended)** — `Import-Module` the module shipped in this repo + call `Invoke-Gscript` with a hashtable. Per-sprint scripts shrink from ~400 lines to ~15:
-
-   ```powershell
-   # In <your-repo>/gscript.ps1:
-   Import-Module C:\path\to\gscript\module\gscript.psd1
-
-   Invoke-Gscript @{
-       RepoOwner     = 'your-username'
-       RepoName      = 'your-repo'
-       FilesToStage  = @('src/file.cs', 'docs/notes.md')
-       CommitMessage = "feat: thing`n`nDetailed description."
-   }
-
-   Remove-Item $MyInvocation.MyCommand.Path -Force
-   ```
-
-   Three calling conventions all work, pick whichever reads cleanest:
-
-   ```powershell
-   # 1. Inline hashtable (above) — natural for per-sprint scripts
-   Invoke-Gscript @{ RepoOwner='owner'; RepoName='repo'; ... }
-
-   # 2. Named parameters — verbose but explicit
-   Invoke-Gscript -RepoOwner 'owner' -RepoName 'repo' `
-                  -FilesToStage @('src/file.cs') -CommitMessage 'feat'
-
-   # 3. PowerShell splatting — when sharing a config across calls
-   $params = @{ RepoOwner='owner'; ... }
-   Invoke-Gscript @params
-   ```
-
-   **Template mode (PowerShell or bash, alt single-file)** — copy `gscript_template.ps1` (or `gscript_template.sh`) into your repo root as `gscript.ps1` (or `gscript.sh`), fill in the per-sprint sections (files-to-stage list + commit message + per-env config), then:
-
-   ```powershell
-   # Windows PowerShell
-   cd C:\path\to\your-repo
-   .\gscript.ps1
-   ```
-
-   ```bash
-   # Linux / macOS (bash template only — module is PowerShell-only at v1.1)
-   cd /path/to/your-repo
-   ./gscript.sh
-   ```
-
-3. **Watch it work** — preflight checks run, files stage, commit lands, push fires, CI watch surfaces every job + step transition live in your shell, post-deploy probes verify the endpoint is responding, script self-deletes. One command, full sprint shipped end-to-end.
-
-## Module API (v1.1+)
-
-The module exports seven functions. `Invoke-Gscript` is the main entry; the rest are standalone helpers callable on their own.
-
-| Function | Purpose |
-|---|---|
-| `Invoke-Gscript` | Main entry. Runs the full ceremony from a hashtable or parameter set. |
-| `Clear-StaleGitLocks` | Auto-clean stale `.git/*.lock` files when no git processes are running. |
-| `Invoke-GitWithRetry` | Run any git command with 3-attempt exponential backoff against lock collisions. |
-| `Test-TrailingNulls` | Check one file for trailing `\x00` bytes (FUSE-mount gotcha defense). |
-| `Get-LocalmdPat` | Resolve a GitHub PAT from `~/private/local.md`. |
-| `Watch-GithubCi` | Poll GitHub Actions for a workflow run, print per-step transitions. |
-| `Test-PostDeployProbe` | Curl an endpoint list, verify each returns a status in the expected range. |
-
-Each function has full PowerShell help: `Get-Help Invoke-Gscript -Full`.
-
-Installation:
-
-```powershell
-# In-repo (clone gscript repo, point Import-Module at the manifest)
-git clone https://github.com/erikcheatham/gscript.git
-Import-Module C:\path\to\gscript\module\gscript.psd1
-
-# Future: PSGallery (banked for v1.1.1+)
-# Install-Module gscript -Scope CurrentUser
+```
+dotnet tool install -g gscrpt --prerelease
 ```
 
-## What it does (in order)
+Update: `dotnet tool update -g gscrpt --prerelease --no-http-cache`.
+
+One-time setup per machine:
+
+1. A GitHub fine-grained PAT (Contents R/W + Actions: Read + Workflows: R/W) in a private localmd file — see [docs/PAT-SETUP.md](docs/PAT-SETUP.md) and [docs/LOCALMD.md](docs/LOCALMD.md). Or skip PATs entirely with a GitHub App + TPM-sealed key — see [docs/CREDENTIAL-SOURCE.md](docs/CREDENTIAL-SOURCE.md).
+2. Tell the tool where that private folder lives on this machine:
+
+```
+gscript config set localmdPath <path-to-your-private-folder>
+```
+
+That's the machine-level config (`%APPDATA%\gscript\config.json`; POSIX `~/.config/gscript/config.json`) — a pointer, not a secret. It makes every verb resolve correctly from any directory. `gscript config show` reads back what resolves.
+
+## Verbs
+
+```
+gscript push [options]        stage explicit files, gate, commit, push, watch CI, probe
+gscript pull [options]        fetch + fast-forward through the ceremony (refuses over local commits)
+gscript release [--tag vX.Y.Z]  lockstep-checked tag + tag-push + publish-workflow report
+gscript task <post|list|show|approve|reject|run>   the file-backed task bus
+gscript im <lint|digest>      the IM hub linter/digest
+gscript cred test             credential read-back / TPM seal check
+gscript config <show|set>     machine-level config (where localmd lives on THIS machine)
+```
+
+A typical sprint push:
+
+```
+gscript push --files src/Thing.cs,docs/notes.md -m "feat: the thing"
+```
+
+Doc-only work: add `--no-deploy` (appends `[skip ci]`, skips CI watch + probes). `--dry-run` runs gates + divergence check and stops.
+
+## What push does, in order
 
 | Step | What | Why |
 |---|---|---|
-| 1 | Stale-lock auto-recovery | `.git/index.lock` and friends get left behind when a prior git process crashed or VS Code's git-polling collided. Detects + auto-removes when no `git` processes are actively running. Self-heals from prior crashes. |
-| 2 | PAT resolution from localmd | Reads `~/private/local.md` for a `github_pat_...` value. No env vars (they go stale across PowerShell windows). No GCM popups (intercept the operator at the wrong moment). One canonical source. |
-| 3 | Trailing-null preflight | Iterates every text-extension file in `filesToStage`. Refuses to commit if any has trailing `\x00` bytes — the FUSE-mount-rsync-trailing-null gotcha that bites sandboxed AI agents writing files through mount layers. |
-| 4 | Per-sprint validators | JSON parse on appsettings, YAML parse on workflows, XML parse on csproj — fail loudly Windows-side before committing corrupt content. Extensible per project. |
-| 5 | Fetch + divergence check | `git fetch` via PAT-in-URL, verify local isn't behind origin/main. Refuses to commit on top of a stale tree. |
-| 6 | Stage explicit paths | Each path in `filesToStage` gets a `git add -- <path>`. NEVER `git add .` — defensive against accidentally bundling operator-scratch into commits. Wrapped in retry-with-backoff to absorb transient lock collisions. |
-| 7 | Audit staged set | Lists what got staged; warns on unexpected files; fails-loud if nothing staged. |
-| 8 | Commit via tempfile | Multi-paragraph commit message goes through `git commit -F <tempfile>` (avoids PowerShell quoting hell). Identity baked in via `-c user.name -c user.email` so the per-repo `.git/config` author identity stays clean. |
-| 9 | Push via PAT-in-URL | Inline PAT in the push URL — never bakes into `.git/config`, no credential-helper cache, no GCM dialog. |
-| 10 | CI watch (per-step) | Polls GitHub Actions API every 20s (configurable). Surfaces workflow-run-level status transitions AND per-job per-step transitions with timing. Diff-only output (no full-state redraws). Color-coded ASCII markers (`>>` / `OK ` / `XX ` / `-- `) to avoid Unicode-arrow rendering issues. |
-| 11 | Post-deploy probe | Curls a configurable endpoint list, verifies each lands in the expected status-code range. Closes the loop: push → CI green → staging actually responds. |
-| 12 | Self-delete | Per-sprint `gscript.ps1` removes itself on success. The script is an AI-generated artifact specific to one sprint; not part of repo history. The template stays committed at `gscript_template.ps1`. |
+| 1 | Stale-lock auto-recovery | `.git/index.lock` and friends get left behind by crashed processes and editor git-polling races. Cleared when no git process is running; every git call retries with backoff. |
+| 2 | Credential resolution | Resolved fresh at run time through the ordered `credentialSource` list: localmd PAT, or a TPM-minted GitHub App installation token. No env vars (stale across shells), no GCM dialogs (non-interactive is pinned on every child git), nothing baked into `.git/config`. |
+| 3 | Content gates | Trailing-NUL check (the sandbox-mount trap), file-size sanity + markdown shrink gates (truncation defense), structured-file parse (JSON/XML/YAML), leak-check against operator-defined patterns on public repos. |
+| 4 | Fetch + divergence guard | Refuses to commit on a stale tree. If origin advanced disjointly from `--files`, auto-fast-forwards; a real overlap refuses (`--no-sync` opts out of the auto-FF). |
+| 5 | Explicit staging | Each `--files` path gets its own `git add -- <path>`. Never `git add .`. A loose-file audit warns about modified files outside the set (`--require-clean` fails hard). |
+| 6 | Commit via tempfile | Multi-paragraph messages through `git commit -F`; identity via `-c user.name/user.email`, never the repo config. |
+| 7 | Push + honest refs | PAT/token-in-URL push, then the tracking ref is refreshed so `git status` tells the truth (the stale-`origin/main` phantom, mechanized away). |
+| 8 | CI watch | Per-job, per-step transitions polled live. A secondary workflow can be reported (bounded, never gating) with MODE honesty: "the suite ran and failed" and "the suite NEVER RAN" are different sentences. |
+| 9 | Post-deploy probes | Curls a configured endpoint list; push → CI green → the endpoint actually answers. |
 
-## The defenses by gotcha
+`pull` rides the same machinery with a read-only credential (`contents:read` App mints — the token that fetches cannot write). `release` refuses unless every `releaseLockstepFiles` entry literally contains the version being tagged, refuses to release unpushed work, and cleans up its own tag on a failed push.
 
-Each defense exists because of a specific bug we hit, in production, more than once. See [docs/GOTCHAS.md](docs/GOTCHAS.md) for the full archaeology. Highlights:
+## The task bus
 
-- **FUSE-mount trailing-null trap.** Sandbox AI agents (Claude in Cowork, Cursor's sandbox, GitHub Copilot Workspace) write files through mount layers that occasionally append 1-1143 trailing `\x00` bytes. JSON/YAML parsers reject; the operator gets cryptic deploy failures. Trailing-null preflight catches it before commit.
-- **Git lock-file races.** VS Code's git integration polls every N seconds; if your `git add` lands in that window, it fails with "Unable to create '.git/index.lock'". Stale-lock auto-recovery + retry-with-backoff absorbs the collision.
-- **PowerShell env-var staleness.** `[Environment]::SetEnvironmentVariable("PAT", ..., "User")` writes to registry but doesn't update the CURRENT shell. Operators rotate the PAT, run the script in the same window, fail mysteriously. Solution: localmd-only, no env vars, no rotation ceremony per-window.
-- **PAT scope confusion.** GitHub's "Workflows" permission lets you edit `.yml` files; "Actions" permission lets you READ run statuses. They're different. Operators add Workflows and assume CI watching will work; it 403s every poll. Documented separately, surfaced in the error message.
-- **CI watch granularity.** Operators want to know "is build-and-push done?" vs "is deploy mid-flight?" not just "workflow=in_progress". Per-step polling surfaces the same view the GitHub UI renders, in your shell.
-- **GCM browser popups.** Git Credential Manager intercepts `git fetch` with a Windows credential dialog or browser OAuth flow if no cached cred. Steals focus mid-script. Solution: PAT-in-URL bypasses the credential helper entirely; recommend `git config --global --unset credential.helper` to remove GCM from the path.
+An agent seat that must never run mutating git can still ship: it edits files, then posts a task record (JSON: repo, working dir, files, message) to a `tasks/` folder beside your private localmd. The operator runs `gscript task list` → `approve` → `run`; the run executes the full push ceremony and writes the resulting sha (or the failure) back into the record. "Reported done" and "shipped" stop being the same claim.
+
+## Configuration
+
+Three tiers, narrowest wins:
+
+| Tier | File | Holds |
+|---|---|---|
+| Repo | `./gscript.json` | Owner/name, workflow files, gates, probes, visibility, `credentialSource` |
+| Machine | `%APPDATA%\gscript\config.json` | `localmdPath` — where the private folder lives on this machine |
+| CLI | flags | Per-sprint data (`--files`, `-m`) + any override |
+
+The public tree never holds an operator path; the machine file holds facts, not secrets; secrets live in the operator's private localmd (or a TPM-sealed App key) and are read fresh per run.
 
 ## Repository layout
 
 ```
 gscript/
-├── README.md                       # this file
-├── LICENSE                         # Apache 2.0
-├── CHANGELOG.md                    # version history
-├── module/
-│   ├── gscript.psd1                # PowerShell module manifest (v1.1+)
-│   └── gscript.psm1                # PowerShell module body (seven exports)
-├── gscript_template.ps1            # canonical PowerShell template (alt single-file mode)
-├── gscript_template.sh             # canonical bash port (single-file only at v1.1)
-├── examples/
-│   ├── module-mode.ps1             # v1.1+ module-mode (~15-line per-sprint script)
-│   ├── minimal-push.ps1            # smallest viable example (PS template mode)
-│   ├── full-ceremony.ps1           # full sprint ceremony (PS template mode)
-│   ├── minimal-push.sh             # smallest viable example (bash)
-│   └── full-ceremony.sh            # full sprint ceremony (bash)
+├── README.md                  # this file
+├── LICENSE                    # Apache 2.0
+├── CHANGELOG.md               # version history (2.0.0-alpha.*)
+├── gscript.json               # this repo's own ceremony config (it ships itself)
+├── src/Gscript/               # the C# CLI
+│   ├── Program.cs             # verb dispatch + options
+│   ├── GscriptRunner.cs       # the push ceremony
+│   ├── Pull/ Release/         # the pull + release ceremonies
+│   ├── Gates/                 # content gates (NUL, size, structure, markdown, leak)
+│   ├── Git/                   # lock-clearing, retrying git runner
+│   ├── Credentials/           # localmd PAT + GitHub App/TPM sources, resolver
+│   ├── Ci/                    # per-step CI watch
+│   ├── Tasks/                 # the file-backed task bus
+│   ├── Im/                    # IM hub lint/digest
+│   └── Local/                 # localmd + machine config
 └── docs/
-    ├── PAT-SETUP.md                # GitHub PAT scoping guide
-    ├── LOCALMD.md                  # the localmd convention explained
-    ├── GOTCHAS.md                  # the production-history archaeology
-    └── DESIGN.md                   # why each decision
+    ├── PAT-SETUP.md           # PAT scoping guide
+    ├── LOCALMD.md             # the localmd convention
+    ├── CREDENTIAL-SOURCE.md   # GitHub App + TPM design (PAT-less operation)
+    ├── GOTCHAS.md             # the production-history archaeology
+    └── DESIGN.md              # why each decision
 ```
 
-## Versions
+## History
 
-- **v1.0** (shipped) — Canonical template + bash port + docs + examples. Single-file mode for either shell. Consumers copy the template into their own project, customize.
-- **v1.1** (shipped) — PowerShell **module** shape. `Import-Module` + `Invoke-Gscript @{...}` reduces per-sprint scripts from ~400 lines to ~15. Seven functions exported: `Invoke-Gscript`, `Clear-StaleGitLocks`, `Invoke-GitWithRetry`, `Test-TrailingNulls`, `Get-LocalmdPat`, `Watch-GithubCi`, `Test-PostDeployProbe`. Template mode still supported; bash stays at template-only.
-- **v1.2** (shipped) — `authorship.ps1` rewriter for cross-repo mailmap-driven author identity cleanup (built on the same gscript defenses).
-- **v1.3** (shipped) — IM+SM unified context model docs (`docs/IM-SM-MODEL.md`).
-- **v1.4** (current) — `Invoke-Gscript -NoDeploy` switch: auto-appends `[skip ci]` to commit subject, forces `WatchCi=$false`, forces `ProbeEndpoints=@()`. One semantic flag coordinating the three settings needed for "commit lands on origin/main but no CI fires." Use for documentation pushes / IM banking / config tweaks where firing CI would be wasted wall-clock. See `examples/nodeploy-mode.ps1`.
-- **v1.5** (banked) — PSGallery publish: `Install-Module gscript` directly.
-- **v2.0** (banked) — Bash sourceable library at parity with the PowerShell module: `source gscript.bash; invoke_gscript` for non-PowerShell consumers.
-- **v3.0** (banked) — Cross-shell config file (`.gscript.yaml` at repo root) so per-sprint customization is data-not-code. PowerShell + bash both read the same config; ceremony stays language-portable.
+`1.x` was a PowerShell module + single-file templates (see git history and [CHANGELOG.md](CHANGELOG.md)); `2.0.0-alpha.*` is the C# rewrite as a dotnet global tool, which replaced it entirely — one binary, every OS, no per-repo script copies. The PowerShell surface has been removed from the tree; its lineage and lessons live on in `docs/GOTCHAS.md`.
+
+## The defenses by gotcha
+
+Every check traces to a real production bug, documented in [docs/GOTCHAS.md](docs/GOTCHAS.md). Highlights: sandbox mount layers appending trailing `\x00` bytes to written files; editor git-polling lock collisions; env-var credential staleness across shells; the Actions-vs-Workflows PAT scope confusion that 403s CI watching; GCM dialogs stealing focus mid-script; the tracking ref lying after PAT-URL pushes; a green primary workflow masking a test suite that never ran.
 
 ## Lineage
 
-`gscript` was extracted from infrastructure originally built across a multi-repo .NET stack with a multi-machine deployment (dev workstation + staging server + build host). The same wrapper pattern works for any GitHub-hosted project where an AI session is authoring commits via a sandboxed file layer.
+Extracted from infrastructure built across a multi-repo .NET stack with a multi-machine deployment (dev workstation + staging + build host + generation server). The same ceremony works for any GitHub-hosted project where an AI session authors commits through a sandboxed file layer and a human owns the ship decision.
 
-Sister project: [Recto](https://github.com/erikcheatham/Recto) — an operator-phone-as-root-of-trust capability substrate. `gscript`'s localmd PAT convention is sized to be small enough that future versions can migrate to a Recto-vault-backed PAT-resolver without changing the per-sprint contract.
+Sister project: [Recto](https://github.com/erikcheatham/Recto) — an operator-phone-as-root-of-trust capability substrate. gscript's credential model is sized so a future resolver can ride a Recto vault without changing the per-sprint contract.
 
 ## License
 
@@ -162,8 +124,8 @@ Apache 2.0. See [LICENSE](LICENSE).
 
 ## Contributing
 
-Issues + PRs welcome. The hard rules are:
+Issues + PRs welcome. The hard rules:
 
-1. **No new external dependencies** at v1. Stdlib only (PowerShell built-ins, bash + coreutils + curl). The "single file you can drop into any repo" property is load-bearing.
-2. **Every new defense traces back to a real bug.** Add a row in `docs/GOTCHAS.md` explaining the production incident the new check defends against. Speculative defenses go in v2.0 (config-driven).
-3. **Per-shell ports stay in sync.** A defense added to the PowerShell template gets ported to the bash template in the same PR. v1.1's module shape may unify these; until then, parity is enforced by review.
+1. **No new external dependencies.** The tool is stdlib-only (.NET BCL + child `git`). Single-binary portability is load-bearing.
+2. **Every new defense traces to a real bug.** Add the incident to `docs/GOTCHAS.md` in the same PR. Speculative defenses don't ship.
+3. **Fail loud, never silent.** A gate that can't run is a red result, not a skipped one; a report never invents a mode it didn't verify.
