@@ -17,7 +17,7 @@ internal static class Cli
 {
     // Keep in lockstep with Gscript.csproj <Version> (alpha.13 shipped with this const lagging —
     // caught at the alpha.14 bump; the lint for this is on the backlog).
-    private const string Version = "gscript 2.0.0-alpha.17";
+    private const string Version = "gscript 2.0.0-alpha.18";
 
     public static int Run(string[] args)
     {
@@ -127,7 +127,10 @@ internal static class Cli
         if (noSync) cfg.NoSync = true;
         if (requireClean) cfg.RequireClean = true;
         if (maxShrinkPct is int mp) cfg.MaxShrinkPctOverride = mp;
-        foreach (var p in allowShrink) cfg.ShrinkageOverrides[p] = 100;
+        // Normalize to forward slashes so the exemption matches however the operator typed the
+        // path (--files is usually backslashed on Windows; the gate's suggested rerun string is
+        // forward-slashed — before alpha.18 these could NEVER match each other).
+        foreach (var p in allowShrink) cfg.ShrinkageOverrides[p.Replace('\\', '/')] = 100;
 
         return cfg;
     }

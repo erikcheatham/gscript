@@ -4,6 +4,39 @@ All notable changes to `gscript` will be documented in this file. Format loosely
 
 > Versions `2.0.0-alpha.*` are the C# CLI/dotnet-tool successor to the PowerShell module (`1.x` below). The intervening alpha.1–alpha.4 notes live in `Gscript.csproj` `<PackageReleaseNotes>`.
 
+## [2.0.0-alpha.18] — 2026-08-02
+
+### Fixed
+
+- **`--allow-shrink` could never match a Windows `--files` path.** The exemption dictionary was
+  keyed on the `--files` entry exactly as typed (backslashes), while the shrink gate's suggested
+  rerun string prints the forward-slashed form — so pasting the tool's own suggestion back
+  verbatim still failed the same gate (three documented attempts on 2026-08-02).
+  Both sides now normalize to forward slashes and compare ignore-case; the printed suggestion is
+  accepted as printed.
+- **A push whose `--files` all SKIPped could still commit and push.** The `nothing was staged`
+  guard counted the whole index, so pre-staged leftovers (an earlier `git rm`) satisfied it and
+  shipped under the push's message — which is how a literal `"..."` became a commit message on
+  a consuming repo's origin/main. New requested∩staged guard: if none of the operator's
+  `--files` made it into the index, refuse, and say what the pre-staged entries are standing in
+  the way. Companion placeholder guard: a commit message that is nothing but dots/whitespace is
+  refused like an empty one.
+
+### Added
+
+- **Deleted-file staging.** A `--files` entry missing from the working tree but tracked at HEAD
+  is now staged as a deletion (`git add` on a tracked-but-deleted pathspec records the removal);
+  only missing-AND-untracked paths SKIP. This retires the plain-git fallback for deletion
+  commits — a consuming repo's 25-deletion cleanup sweep was the last push that needed it.
+
+### Why
+
+Every one of these was earned the same day by the same wave: a gate whose relief flag cannot be
+satisfied teaches operators to bypass gates; a guard that counts the wrong set ships the wrong
+commit; a ceremony with a documented fallback isn't complete. The gate's suggestion must be
+literally runnable, the guard must count what the operator asked for, and deletions are commits
+like any other.
+
 ## [2.0.0-alpha.17] — 2026-08-02
 
 ### Added

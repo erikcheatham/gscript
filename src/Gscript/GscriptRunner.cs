@@ -37,6 +37,11 @@ public static partial class GscriptRunner
         if (cfg.FilesToStage is null || cfg.FilesToStage.Count == 0)
             throw new GscriptException("FilesToStage must contain at least one path.");
         if (string.IsNullOrEmpty(cfg.CommitMessage)) throw new GscriptException("CommitMessage is required.");
+        // Placeholder guard: a message that is nothing but dots/whitespace is a template that was
+        // never filled in ("..." shipped as a real commit message on 2026-08-02) — refuse it the
+        // same way an empty message is refused.
+        if (cfg.CommitMessage.Trim().Trim('.').Length == 0)
+            throw new GscriptException($"CommitMessage \"{cfg.CommitMessage}\" looks like an unfilled placeholder — refusing.");
 
         // ── NoDeploy: three coordinated mutations ─────────────────
         bool noDeploy = cfg.NoDeploy || cfg.NoDeployDefault;
@@ -98,7 +103,20 @@ public static partial class GscriptRunner
         foreach (var f in cfg.FilesToStage)
         {
             string full = Path.Combine(workingDir, f);
-            if (!File.Exists(full)) { Log.Yellow($"  SKIP (missing): {f}"); continue; }
+            if (!File.Exists(full))
+            {
+                // Missing on disk but tracked at HEAD = a DELETION to stage — `git add` on a
+                // tracked-but-deleted pathspec records the removal. (Pre-alpha.18 this was a
+                // SKIP, which forced the plain-git fallback for every deletion commit.)
+                // Missing AND untracked stays a SKIP: there is genuinely nothing to stage.
+                string relDel = f.Replace('\\', '/');
+                var tracked = GitCommand.Run(new[] { "ls-files", "--error-unmatch", "--", relDel }, workingDir);
+                if (!tracked.Success) { Log.Yellow($"  SKIP (missing, untracked): {f}"); continue; }
+                var del = GitRunner.InvokeGitWithRetry(new[] { "add", "--", relDel }, workingDir, gitDir, context: "add (deletion)");
+                if (!del.Success) throw new GscriptException($"git add (deletion) failed for {f} after retries");
+                Log.Cyan($"  STAGED DELETION: {f}");
+                continue;
+            }
             var add = GitRunner.InvokeGitWithRetry(new[] { "add", "--", f }, workingDir, gitDir, context: "add");
             if (!add.Success) throw new GscriptException($"git add failed for {f} after retries");
         }
@@ -111,7 +129,17 @@ public static partial class GscriptRunner
         foreach (var s in staged) Log.DarkGray($"  {s}");
         if (staged.Count == 0) throw new GscriptException("nothing was staged");
 
-        var normalizedExpected = cfg.FilesToStage.Select(f => f.Replace('\\', '/')).ToHashSet();
+        var normalizedExpected = cfg.FilesToStage.Select(f => f.Replace('\\', '/'))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Requested∩staged guard: if NONE of the operator's --files made it into the index, the
+        // staged set is entirely pre-staged leftovers — committing those under this push's message
+        // is how "..." shipped as a commit (2026-08-02). Name pre-staged paths in --files to
+        // commit them deliberately (deletions now stage, so that always works).
+        if (!staged.Any(s => normalizedExpected.Contains(s)))
+            throw new GscriptException(
+                $"none of the {cfg.FilesToStage.Count} requested --files made it into the index; " +
+                $"the {staged.Count} staged entr{(staged.Count == 1 ? "y is" : "ies are")} pre-staged " +
+                "leftovers — refusing to commit them under this push's message. Name them in --files if intended.");
         var unexpected = staged.Where(s => !normalizedExpected.Contains(s)).ToList();
         if (unexpected.Count > 0)
         {
@@ -364,7 +392,7 @@ public static partial class GscriptRunner
             if (anySize)
             {
                 int maxPct = cfg.MaxShrinkPctOverride
-                             ?? (cfg.ShrinkageOverrides.TryGetValue(f, out var ov) ? ov : g.FileSizeSanity.MaxShrinkPct);
+                             ?? (cfg.ShrinkageOverrides.TryGetValue(rel, out var ov) ? ov : g.FileSizeSanity.MaxShrinkPct);
                 var r = FileSizeSanityGate.Check(rel, full, workingDir, maxPct);
                 if (!r.Ok) { Log.Red($"  FAIL {f} ({r.Reason})"); throw new GscriptException($"File-size gate failed on {f}: {r.Reason}"); }
             }
@@ -376,7 +404,7 @@ public static partial class GscriptRunner
             if (anyMd)
             {
                 int maxPct = cfg.MaxShrinkPctOverride
-                             ?? (cfg.ShrinkageOverrides.TryGetValue(f, out var ov) ? ov : g.MarkdownLineCount.MaxShrinkPct);
+                             ?? (cfg.ShrinkageOverrides.TryGetValue(rel, out var ov) ? ov : g.MarkdownLineCount.MaxShrinkPct);
                 var r = MarkdownLineCountGate.Check(rel, full, workingDir, maxPct, g.MarkdownLineCount.MinHeadLines);
                 if (!r.Ok) { Log.Red($"  FAIL {f} ({r.Reason})"); throw new GscriptException($"Markdown-line gate failed on {f}: {r.Reason}"); }
             }

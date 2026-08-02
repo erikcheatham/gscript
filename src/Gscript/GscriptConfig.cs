@@ -60,7 +60,7 @@ public sealed class GscriptConfig
     public string? CommitMessage { get; set; }
     public bool NoDeploy { get; set; }
     public bool DryRun { get; set; }   // run gates + fetch/divergence, then stop before staging/commit/push
-    public Dictionary<string, int> ShrinkageOverrides { get; set; } = new(); // relpath -> maxPct (per-file shrink exemption; CLI --allow-shrink sets 100)
+    public Dictionary<string, int> ShrinkageOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase); // FORWARD-SLASHED relpath -> maxPct (per-file shrink exemption; CLI --allow-shrink sets 100; ignore-case for Windows paths)
     public int? MaxShrinkPctOverride { get; set; }   // CLI --max-shrink-pct: global shrink-gate relax for this push (wins over per-file + default)
 
     // ── credential source (2.0.0-alpha.11) ────────────────────────
