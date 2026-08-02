@@ -1,0 +1,36 @@
+name: Build
+
+# Compile-only CI (2026-08-02) — closes the gap the alpha.16 evening exposed:
+# this repo had NO on-push compile check, so origin/main could hold a commit
+# nobody had built (alpha.15 sat unproven for half an hour; a missing `using`
+# in the working tree broke the operator's next `dotnet run` instead of a
+# workflow). publish.yml compiles too, but only at tag time — this proves
+# every push, in ~1 minute, before anything depends on it.
+#
+# No tests exist in this repo yet; when they do, add the `dotnet test` step
+# here and this workflow inherits gate duty.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Self-hosted on the build box (2026-08-01) — a runner instance registered
+    # to THIS repo (runner registration is per-repo on a personal account, so
+    # another repo's instance on the same machine can't serve it).
+    # Label-pinned `mnemosyne` so a bare `self-hosted` can never route the job
+    # to a different self-hosted machine.
+    # dotnet 10.0.302 is machine-wide on the box, so no setup-dotnet download.
+    runs-on: [self-hosted, mnemosyne]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build (Release)
+        run: dotnet build src/Gscript/Gscript.csproj -c Release
